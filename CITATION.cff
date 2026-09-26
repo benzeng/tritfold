@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+message: "If you use Tritfold, please cite as below."
+title: "Tritfold: Open End-to-End Training of ~1.75 bpw Ternary LLMs with Hadamard-Folded Weights"
+type: software
+authors:
+  - name: "Tritfold contributors"
+version: 0.1.0
+date-released: "2026-09-26"
+license: Apache-2.0
+repository-code: "https://github.com/TRITFOLD_ORG/tritfold"
+keywords:
+  - ternary quantization
+  - large language models
+  - hadamard transform
+  - quantization-aware training
+  - knowledge distillation
