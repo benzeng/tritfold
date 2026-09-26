@@ -266,34 +266,60 @@
 | 三值模型运行指南（三种方式归档） | `./serving-guide.md` |
 | 大产物（新建） | `<WORK_DIR>/` |
 
-## 附录 B：命令速查（骨架，执行时以 --help 与 conversion/base.py 实参为准）
+## 附录 B：命令速查（从零到验证的完整链）
+
+### 0) 依赖（一次性）
 
 ```bash
-# 网络
-export https_proxy=<proxy>
-
-# M0：工具链
-source <VENV>/bin/activate
-pip install cmake
-pip install -e <FORK_DIR>/gguf-py
-bash <DEMO_DIR>/scripts/build_cpu_linux.sh <FORK_DIR>
-# 产物：<RUNTIME_BIN>/{llama-cli,llama-quantize,llama-perplexity,...}
-
-# M1：元数据与反量化（proto/l0prime/）
-python proto/l0prime/dump_metadata.py <MODELS_DIR>/Ternary-Bonsai-2-27B/Ternary-Bonsai-2-27B-PQ2_0.gguf
-python proto/l0prime/dequant_stats.py  --tensor blk.0.ffn_up.weight ...
-
-# M3 Phase 4：打包（清单必须放进模型目录，base.py 从 dir_model 读取）
-cp hadamard_packing.json <旋转后模型目录>/
-python <FORK_DIR>/convert_hf_to_gguf.py <旋转后模型目录> --outfile out.f16.gguf
-BIN=<RUNTIME_BIN>
-# 注意：token_embd/output 默认会被 llama-quantize 降级（llama-quant.cpp:503），
-# 必须显式指定类型，否则嵌入表被转成 Q4_K、契约被破坏
-$BIN/llama-quantize --token-embedding-type PTQ1_0 --output-tensor-type PTQ1_0 \
-    out.f16.gguf out.ptq1_0.gguf PTQ1_0
-$BIN/llama-cli -m out.ptq1_0.gguf -p "Hello" -n 64            # 加载冒烟
-$BIN/llama-perplexity -m out.ptq1_0.gguf -f wikitext2-test.txt  # 运行时侧 ppl 核验
+git clone -b prism https://github.com/PrismML-Eng/llama.cpp.git <FORK_DIR>
+python -m venv .venv && source .venv/bin/activate
+pip install torch "transformers==4.57.1" "tokenizers==0.22.2" "huggingface-hub==0.36.2" \
+     "datasets==5.0.1" sentencepiece        # 版本钉死是实测结论，勿随意升级
+pip install cmake && pip install -e <FORK_DIR>/gguf-py
+bash <DEMO_DIR>/scripts/build_cpu_linux.sh <FORK_DIR>    # 产物在 <RUNTIME_BIN>/
 ```
+
+### 1) 取模型（或用训练 notebook 自己产出）
+
+```bash
+huggingface-cli download benzeng/tritfold-1.7b-ptq1_0
+```
+
+### 2) 打包（训练 notebook 的导出 cell 产出的目录已内置 hadamard_packing.json）
+
+```bash
+python <FORK_DIR>/convert_hf_to_gguf.py <export_dir> --outfile out.f16.gguf
+<RUNTIME_BIN>/llama-quantize \
+    --token-embedding-type PTQ1_0 --output-tensor-type PTQ1_0 \
+    out.f16.gguf out.ptq1_0.gguf PTQ1_0
+# 两个类型标志是硬性要求：默认规则会把 token_embd/output 降级 Q4_K（llama-quant.cpp），
+# 嵌入表不再是三值、契约即被破坏
+```
+
+### 3) 契约校验（C1–C5：元数据/符号表逐字节/折叠清单/无损/小岛全精度）
+
+```bash
+python proto/common/check_contract.py out.ptq1_0.gguf <export_dir>
+```
+
+### 4) 运行时 ppl 与生成（采样配方必带——三值分布尾部平坦，默认采样会 token 循环）
+
+```bash
+# 评估切片：任意 wiki 风格文本即可（口径需注明；与训练评估协议的差异见 findings-6）
+<RUNTIME_BIN>/llama-perplexity -m out.ptq1_0.gguf -f <wiki_text>.txt -t 12 -c 512
+<RUNTIME_BIN>/llama-cli -m out.ptq1_0.gguf \
+    -p "The Great Wall of China was originally built to" -n 96 -st \
+    --temp 0.5 --top-p 0.85 --top-k 20 --repeat-penalty 1.1
+```
+
+### 5) 真值挖掘（可选：对任何 PTQ1_0/PQ2_0 公开 artifact 做契约与统计分析）
+
+```bash
+python proto/l0prime/dump_metadata.py <gguf> [out.json]
+python proto/l0prime/dequant_stats.py <PQ2_0_gguf> [out.json]
+```
+
+> 网络：受限环境可设 `HF_ENDPOINT=https://hf-mirror.com` 等镜像；本仓库不依赖任何内网资源。
 
 ---
 
