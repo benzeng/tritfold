@@ -7,7 +7,7 @@ authors:
 version: 0.1.0
 date-released: "2026-09-26"
 license: Apache-2.0
-repository-code: "https://github.com/TRITFOLD_ORG/tritfold"
+repository-code: "https://github.com/benzeng/tritfold"
 keywords:
   - ternary quantization
   - large language models

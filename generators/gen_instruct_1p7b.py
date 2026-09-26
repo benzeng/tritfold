@@ -594,7 +594,7 @@ nb = {
     "cells": cells,
 }
 
-out = Path("./colab/bonsai-instruct-qat-1p7b.ipynb")
+out = Path("notebooks/tritfold-instruct-1p7b.ipynb")
 out.parent.mkdir(parents=True, exist_ok=True)
 out.write_text(json.dumps(nb, indent=1, ensure_ascii=False))
 print("wrote", out)
