@@ -246,25 +246,33 @@
 
 ---
 
-## 附录 A：关键路径索引
+## 附录 A：资源索引
+
+### 仓库内（相对路径）
 
 | 内容 | 路径 |
 |---|---|
-| 本规划与姊妹文档 | `./` |
+| 本规划 | `docs/implementation-plan.md` |
+| 方法重建 / 取证笔记 | `docs/method-reconstruction.md` · `docs/forensics-notes.md` |
+| 实验档案（六份 findings + 结果日志） | `docs/findings-*.md` · `docs/results-log.md` |
+| 运行指南（三种方式 + 必备采样配方） | `docs/serving-guide.md` |
+| 训练 notebook（0.6B / 1.7B / 指令蒸馏） | `notebooks/tritfold-train-0p6b.ipynb` · `tritfold-train-1p7b.ipynb` · `tritfold-instruct-1p7b.ipynb` |
+| Serving notebook（A100 CUDA + 公网隧道） | `notebooks/tritfold-serving-a100.ipynb` |
+| notebook 生成器（单一事实源，改动先改这里） | `generators/` |
+| 本机验证链（契约检查/反量化/探针/训练器） | `proto/` |
+| 发布模型（Apache-2.0，Qwen3 衍生） | HF：`benzeng/tritfold-1.7b-ptq1_0` · `benzeng/tritfold-0.6b-ptq1_0` |
+
+### 仓库外（占位符约定见 README；均为外部资源）
+
+| 内容 | 路径 |
+|---|---|
 | fork 源码（prism @ 9a9394a89） | `<FORK_DIR>/` |
-| CPU 构建脚本 | `<DEMO_DIR>/scripts/build_cpu_linux.sh` |
-| 格式契约文档 | `<DEMO_DIR>/MODEL-FORMATS.md` |
-| 白皮书（4 份 PDF） | `<DEMO_DIR>/*.pdf` |
-| 论文全文缓存（持久） | `<DEMO_DIR>/papers/*.txt` |
+| 构建脚本 / 格式契约文档 / 白皮书（4 份 PDF） | `<DEMO_DIR>/scripts/build_cpu_linux.sh` · `<DEMO_DIR>/MODEL-FORMATS.md` · `<DEMO_DIR>/*.pdf` |
+| 论文全文缓存 | `<DEMO_DIR>/papers/*.txt` |
 | venv | `<VENV>/` |
-| 基座模型 | `<MODELS_DIR>/Qwen3-0.6B`、`Qwen3-1.7B` |
-| 地面真值 GGUF | `<MODELS_DIR>/Ternary-Bonsai-2-27B/Ternary-Bonsai-2-27B-PQ2_0.gguf` |
-| 环境坑位手册 | `ENVIRONMENT.md (local-only)` |
-| 原型代码（新建） | `proto/` |
-| Colab 端到端 QAT notebook（≥16GB GPU） | `./notebooks/tritfold-train-0p6b.ipynb`（生成器 make_notebook.py；核心 cell 已在本机 GPU 冒烟：恒等性/梯度流/训练步/内存路径） |
-| Colab A100 serving notebook | `./notebooks/tritfold-serving-a100.ipynb`（生成器 make_serving_notebook.py；CUDA fork 构建 + llama-server + cloudflared 隧道） |
-| 三值模型运行指南（三种方式归档） | `./serving-guide.md` |
-| 大产物（新建） | `<WORK_DIR>/` |
+| 基座模型 | `<MODELS_DIR>/Qwen3-0.6B` · `Qwen3-1.7B` |
+| 地面真值 GGUF（M1 式真值挖掘用，可选） | `<MODELS_DIR>/Ternary-Bonsai-2-27B/Ternary-Bonsai-2-27B-PQ2_0.gguf` |
+| 大产物工作目录 | `<WORK_DIR>/` |
 
 ## 附录 B：命令速查（从零到验证的完整链）
 
