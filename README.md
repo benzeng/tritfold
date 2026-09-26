@@ -17,7 +17,34 @@ Tritfold takes a standard fp16 LLM (Qwen3), folds its weights into a fixed block
 | Training cost | T4+A100, ~6 h | 1× A100, ~5 h, from scratch |
 | Contract verification | C1–C5 PASS, bit-exact | C1–C5 PASS, bit-exact |
 
-Honest quality watermark: **fluent but factually unreliable**. These are 9.1×-compressed models distilled on ~20M tokens of WikiText-103 in hours — grammatical, on-register text with hallucinated facts. The 1.7B artifact crosses the 1.5×FP quality gate; instruct-tuning and scale are the open frontiers (see [Roadmap](CONTRIBUTING.md#roadmap)).
+Honest quality watermark: **fluent but factually unreliable** — and these are **continuation models, not assistants** (instruct tuning is [roadmap item #1](CONTRIBUTING.md#roadmap)). Real outputs from the 1.7B artifact with the correct sampling recipe:
+
+**✅ English continuation** (home turf — fluent, on-register, facts confabulated):
+
+```
+> The Great Wall of China was originally built to
+The Great Wall of China, a 1982 novel by the American author and editor,
+Robert A. Ewell. In the early 20th century, the Great Wall of China became
+a popular tourist attraction...
+```
+
+**❌ Chat-style English** (no assistant identity in training data — drifts into the nearest wiki register, here author biographies):
+
+```
+> who are you?
+I think that's why I got the idea for my first novel, "The New York Times"
+(1963). That novel was published in 1964 and 1965, and it is likely that I
+had a desire to write an English-language novel...
+```
+
+**❌ Non-English prompts** (KD corpus is English-only — collapses into enumeration loops):
+
+```
+> 用一段话介绍长城的历史
+B. 1. B. 2. 6. 7. B. 1. B. 1. 8. 9. B. 1. B. 1. B. 1. 1. B. 1. B. ...
+```
+
+Need chat/instruction behavior? Run [`notebooks/tritfold-instruct-1p7b.ipynb`](notebooks/tritfold-instruct-1p7b.ipynb) — ultrachat-mixed KD from the released checkpoint. The 1.7B artifact crosses the 1.5×FP quality gate on language modeling; instruct-tuning and scale are the open frontiers.
 
 Full experiment records — including every failure (seven falsified discrete-code-movement approaches, an fp16 measurement-inflation artifact that faked a milestone) — are in [`docs/`](docs/) and [`docs/results-log.md`](docs/results-log.md).
 
