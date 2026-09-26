@@ -40,10 +40,17 @@ from google.colab import drive
 drive.mount("/content/drive")
 import os, torch
 DRIVE = "/content/drive/MyDrive"
-for f in ("m4.ptq1_0.gguf", "qat-v1.ptq1_0.gguf"):
-    print(("OK  " if os.path.exists(os.path.join(DRIVE, f)) else "缺失 "), f)
-assert os.path.exists(os.path.join(DRIVE, "m4.ptq1_0.gguf")), \\
-    "Drive 根目录没有 m4.ptq1_0.gguf——先在左侧文件页上传到 MyDrive 根目录"
+CANDIDATES_17B = ("tritfold-1.7b-ptq1_0.gguf", "m4.ptq1_0.gguf")
+CANDIDATES_06B = ("tritfold-0.6b-ptq1_0.gguf", "qat-v1.ptq1_0.gguf")
+def find_model(cands):
+    for c in cands:
+        if os.path.exists(os.path.join(DRIVE, c)):
+            return c
+    return None
+M17, M06 = find_model(CANDIDATES_17B), find_model(CANDIDATES_06B)
+print("1.7B:", M17 or "缺失（HF 下载 tritfold-1.7b-ptq1_0.gguf 后上传到 MyDrive 根目录）")
+print("0.6B:", M06 or "缺失（可选）")
+assert M17, "Drive 根目录没有任何 1.7B GGUF（tritfold-1.7b-ptq1_0.gguf 或旧名 m4.ptq1_0.gguf）"
 cap = torch.cuda.get_device_capability()
 CUDA_ARCH = f"{cap[0]}{cap[1]}"
 print("GPU:", torch.cuda.get_device_name(0), "| sm_" + CUDA_ARCH)"""))
@@ -61,7 +68,7 @@ cells.append(md("""## 启动服务
 `MODEL` 二选一后运行；随后运行自测 cell。日志在 `/content/server.log`。"""))
 
 cells.append(code("""# 启动 llama-server（后台；-ngl 99 全量上 GPU，-fa on 为 Bonsai 模型验证过的组合）
-MODEL = os.path.join(DRIVE, "m4.ptq1_0.gguf")     # 1.7B；0.6B: "qat-v1.ptq1_0.gguf"
+MODEL = os.path.join(DRIVE, M17)                  # 0.6B: os.path.join(DRIVE, M06)
 PORT = 8080
 
 !pkill -f llama-server || true

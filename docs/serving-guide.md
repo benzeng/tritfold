@@ -6,6 +6,16 @@
 
 ---
 
+## 获取模型
+
+```bash
+# HuggingFace（Apache-2.0，Qwen3 衍生）
+huggingface-cli download benzeng/tritfold-1.7b-ptq1_0
+huggingface-cli download benzeng/tritfold-0.6b-ptq1_0   # 可选
+```
+
+A100 serving notebook 接受 HF 命名（`tritfold-*-ptq1_0.gguf`）或本地训练产物旧名（`m4.ptq1_0.gguf`/`qat-v1.ptq1_0.gguf`），上传到 Google Drive 根目录即可。
+
 ## 前提与硬性警告
 
 1. **只能在 prism fork 上运行**。主线 llama.cpp 不认识 PTQ1_0（私有 ggml type 143）与 `prism.hadamard.*` 元数据；同目录的 `*.f16.gguf`（折叠权重的 F16 存储）虽能被主线读入，但会**静默跳过激活旋转、输出乱码**——MODEL-FORMATS.md 的 fork-required 标记即此意。

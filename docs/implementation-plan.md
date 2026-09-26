@@ -1,4 +1,4 @@
-# Bonsai 三值化等效管线：实施规划
+# Tritfold 实施规划（PrismML Bonsai 方法的等效复现）
 
 - 日期：2026-09-22
 - 版本：v1.3（经三轮 review→fix 迭代，修订记录见文末）
@@ -9,7 +9,7 @@
 
 ## 1. 目标与总体策略
 
-**总目标**：用公开数学重建与 Bonsai 2 等效的三值化管线，产出满足 artifact 契约（§2 的 C1–C6）的三值模型，并经 PrismML fork 运行时端到端验证；质量对标已发布的 Ternary-Bonsai 系列。
+**总目标**：用公开数学重建与 PrismML Bonsai 2 等效的三值化管线（本项目：Tritfold），产出满足 artifact 契约（§2 的 C1–C6）的三值模型，并经 PrismML fork 运行时端到端验证；质量对标已发布的 Ternary-Bonsai 系列。
 
 **策略要点**：
 
@@ -53,7 +53,7 @@
 | fork 源码 | ✅ prism 分支 @ 9a9394a89（已核对） | `<FORK_DIR>/` |
 | fork CPU 构建 | ❌ 未构建（无 build 目录，且缺 cmake） | `build_cpu_linux.sh <FORK_DIR>`（须传仓库路径；产物在 `Bonsai-demo/bin/cpu/`） |
 | gguf-py | ❌ venv 未安装 | `pip install -e <FORK_DIR>/gguf-py` |
-| 论文全文缓存 | ✅ 持久副本存在 | `<BONSAI_DIR>/papers/*.txt`（/tmp 副本易失，勿依赖） |
+| 论文全文缓存 | ✅ 持久副本存在 | `<DEMO_DIR>/papers/*.txt`（/tmp 副本易失，勿依赖） |
 | 网络 | HF 直连不通 | `export https_proxy=<proxy>`；ModelScope 直连备份 |
 
 ### 3.3 模型资产（<MODELS_DIR>/）
@@ -74,7 +74,7 @@
 - 大产物（checkpoint、GGUF）：`<WORK_DIR>/`（新建，避免污染原始模型目录）
 - 磁盘预算（47GB 内）：CPU 构建 ~2GB、WikiText-2 <0.1GB、0.6B 各阶段产物 ~4GB、1.7B fp16 副本+产物 ~8GB、checkpoint 周转 ~10GB，余量充足。
 
-注：`<BONSAI_DIR>/` 存有本系列文档（notes/reconstruction）的同名镜像；本计划更新后建议同步一份过去。
+注：上游私有工作档案与本项目发布版分离维护。
 
 ---
 
@@ -102,14 +102,14 @@
 | 任务 | 内容 |
 |---|---|
 | T0.1 | 安装 cmake（`pip install cmake` 进 venv，或 apt）；可选 ninja |
-| T0.2 | 构建 fork CPU 版：`bash <DEMO_DIR>/scripts/build_cpu_linux.sh <FORK_DIR>`（**必须传仓库路径参数**，否则脚本会在 Bonsai-demo/ 下重新 clone；全量构建约 30–60 分钟/12 核，RAM 紧张时将脚本内 `-j$(nproc)` 改为 `-j8`；产物安装在 `Bonsai-demo/bin/cpu/`）；冒烟 `llama-cli --version` |
+| T0.2 | 构建 fork CPU 版：`bash <DEMO_DIR>/scripts/build_cpu_linux.sh <FORK_DIR>`（**必须传仓库路径参数**，否则脚本会在 demo 目录下重新 clone；全量构建约 30–60 分钟/12 核，RAM 紧张时将脚本内 `-j$(nproc)` 改为 `-j8`；产物安装在 `<RUNTIME_BIN>/`）；冒烟 `llama-cli --version` |
 | T0.3 | venv 安装 gguf-py：`pip install -e <FORK_DIR>/gguf-py`；冒烟 `python -c "import gguf"` |
 | T0.4 | 设代理下载 WikiText-2（datasets：`Salesforce/wikitext`, `wikitext-2-raw-v1`） |
 | T0.5 | 建 `proto/` 与 `<WORK_DIR>/` 目录骨架；建 `results-log.md` 表头（日期/级别/配置哈希/指标/备注） |
 | T0.6 | `git init` 于 `proto/`（实验代码版本化，results-log 的配置哈希对应 git commit） |
 
 **验收**：三项冒烟全过；`results-log.md` 就位。
-**交付**：`Bonsai-demo/bin/cpu/` 二进制套件、就绪的 venv、`proto/` git 仓库骨架。
+**交付**：`<RUNTIME_BIN>/` 二进制套件、就绪的 venv、`proto/` git 仓库骨架。
 
 ### M1 地面真值挖掘（L0′，1–2 天，纯 CPU）
 
@@ -170,7 +170,7 @@
 
 - **算力账与默认方案**：沿用 M3 的"教师 logits 预计算 + student 单独在卡"设计——1.7B 学生 fp16 ≈3.4GB + 激活在 6GB 内可行（teacher 与 student 同时在卡 ≈6.8GB 会爆显存，故必须串行）；优化器状态只在 s_g/小岛/embedding 上（MB 量级，无需 CPU offload）。瓶颈是墙钟而非显存：本机 1060 跑充分 E2 约天数级。**决策点（W3 末）**：默认走本机方案（缩小 token 批、梯度检查点、接受天数级墙钟）；仅当需要 1M token 批全量配置或更大端到端成分时，才评估云短租（PV-Tuning 70B 数据点外推）。教师 logits 缓存随语料线性增长（1M tok × top-50 ≈ 0.2GB），磁盘可忽略。
 - **验收门**：对拍分数差 ±1 以内 = 管线等效；差距 >2 分 → 进入 M5 消融定位短板（优先怀疑数据构成与 s_g 处理，重建文档 §6-3/§6-4）。
-- **交付**：1.7B 三值 GGUF + `bonsai-l1-findings.md`（对拍报告）。
+- **交付**：1.7B 三值 GGUF + `docs/findings-*.md`（对拍报告）。
 
 ### M5 消融（L2，与 M4 并行，小规模 0.6B）
 
@@ -182,7 +182,7 @@
 | A4 | S 符号向量候选数：固定种子 1 个 vs 离散搜索少数候选取校准 MSE 最优（SpinQuant 报告的随机基方差压缩） |
 
 每项实验 0.6B、固定步数与数据，ppl + 小基准（如 ARC-easy 子集）双指标，登记 results-log.md。
-**交付**：`bonsai-l2-ablation-findings.md`（四组消融结论 + E1 玩具验证记录）。
+**交付**：`docs/findings-4-discrete-movement.md`（消融结论 + E1 玩具验证记录）。
 
 ### M6 27B 外推（L3，决策门）
 
@@ -190,7 +190,7 @@
 - 成本：200–800 A100·时（重建文档 §4 外推），本机不可行 → **云预算决策门**。
 - 新增工作：GDN/线性注意力路径（softmax 层沿用 M2 同款逐 matmul 折叠；`ssm_out` fold-before-matmul；激活侧 [hd,nk,rep]→[hd,rep,nk] 置换与 `gdn_v_grouped` 契约字段）、视觉塔与 emb/head 保持原契约；KV cache 旋转域存储与 RoPE 旋回（llama-kv-cache.cpp:2067）为运行时内部行为，打包侧无需处理。
 - **降级目标**（若云预算不批）：用 MiniCPM5-2B（Llama 架构）与 Spark-X2.5-1.7B 做架构变体验证，坐实 C6 的架构无关性主张。
-- **交付**：`bonsai-l3-decision.md`（云预算评估或降级方案结论）。
+- **交付**：`docs/findings-*.md`（云预算评估或降级方案结论）。
 
 ---
 
@@ -199,7 +199,7 @@
 1. **ppl 协议**：WikiText-2 raw test，全文滑窗 stride=512、ctx=1024，fp16，固定种子；每次实验的完整配置记入 results-log.md（一行一实验）。
 2. **契约自检**：`proto/common/check_contract.py`（M3 起用）——读 GGUF 元数据与打包权重，逐项输出 C1–C5 通过/失败。
 3. **无损判据**：C3 的全张量 ‖s_g·T − Z‖∞/amax < 1e-3 作为 Phase 3 固定闸门，不通过不进 Phase 4。
-4. **结果登记**：`Bonsai/results-log.md` 从 M0 起维护；每级 findings 单独成文（命名 `bonsai-<级别>-findings.md`），与本计划同目录。
+4. **结果登记**：`docs/results-log.md` 从 M0 起维护；每级 findings 单独成文（命名 `findings-<序号>-<主题>.md`），在 `docs/` 目录。
 5. **活文档**：每级验收后在 §4 表更新状态列，并将与计划的偏差、决策点结论回写对应里程碑小节；重大修订追加文末修订记录。
 
 ---
@@ -255,7 +255,7 @@
 | CPU 构建脚本 | `<DEMO_DIR>/scripts/build_cpu_linux.sh` |
 | 格式契约文档 | `<DEMO_DIR>/MODEL-FORMATS.md` |
 | 白皮书（4 份 PDF） | `<DEMO_DIR>/*.pdf` |
-| 论文全文缓存（持久） | `<BONSAI_DIR>/papers/*.txt` |
+| 论文全文缓存（持久） | `<DEMO_DIR>/papers/*.txt` |
 | venv | `<VENV>/` |
 | 基座模型 | `<MODELS_DIR>/Qwen3-0.6B`、`Qwen3-1.7B` |
 | 地面真值 GGUF | `<MODELS_DIR>/Ternary-Bonsai-2-27B/Ternary-Bonsai-2-27B-PQ2_0.gguf` |
