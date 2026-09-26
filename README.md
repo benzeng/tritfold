@@ -25,7 +25,9 @@ Full experiment records — including every failure (seven falsified discrete-co
 
 ### 1. Try the artifacts
 
-Models (GGUF, Apache-2.0, Qwen3 derivatives) → HuggingFace `tritfold` org (links in [Releases](../../releases) once published).
+Models (GGUF, Apache-2.0, Qwen3 derivatives):
+- **[benzeng/tritfold-1.7b-ptq1_0](https://huggingface.co/benzeng/tritfold-1.7b-ptq1_0)** — 1.41×FP, 424 MB
+- [benzeng/tritfold-0.6b-ptq1_0](https://huggingface.co/benzeng/tritfold-0.6b-ptq1_0) — 1.77×FP, 157 MB
 
 Requires the [PrismML llama.cpp fork](https://github.com/PrismML-Eng/llama.cpp) (`prism` branch) — mainline llama.cpp cannot load PTQ1_0 or apply the Hadamard metadata. **Sampling recipe is mandatory** (ternary distributions have flat tails; defaults loop):
 
