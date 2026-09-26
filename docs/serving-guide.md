@@ -66,4 +66,4 @@ curl http://127.0.0.1:8080/v1/chat/completions -H "Content-Type: application/jso
 
 ## GPU 加速（A100 serving）
 
-见 [colab/bonsai-serving-a100.ipynb](colab/bonsai-serving-a100.ipynb)：Colab A100 上构建 fork CUDA 版（PTQ1_0 整数 GEMM + FWHT kernel 的原生主场，prompt 处理比 CPU 快一个量级），从 Drive 拉取 GGUF，起 llama-server 并经 cloudflared 隧道暴露公网 OpenAI 端点。**使用前先把两份 GGUF 上传到 Google Drive 根目录。**
+见 [notebooks/tritfold-serving-a100.ipynb](notebooks/tritfold-serving-a100.ipynb)：Colab A100 上构建 fork CUDA 版（PTQ1_0 整数 GEMM + FWHT kernel 的原生主场，prompt 处理比 CPU 快一个量级），从 Drive 拉取 GGUF，起 llama-server 并经 cloudflared 隧道暴露公网 OpenAI 端点。**使用前先把两份 GGUF 上传到 Google Drive 根目录。**

@@ -2,7 +2,7 @@
 
 - 日期：2026-09-21
 - 性质：基于公开论文与代码取证的**重建推断**，非 PrismML 官方方法
-- 姊妹文档：[bonsai-ternarization-notes.md](bonsai-ternarization-notes.md)（取证与调研）
+- 姊妹文档：[forensics-notes.md](forensics-notes.md)（取证与调研）
 
 ---
 

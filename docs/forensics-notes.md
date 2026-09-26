@@ -166,7 +166,7 @@
 
 ### 8.6 等效方案重建（2026-09-21，独立文档）
 
-基于创始人五篇论文的数学 + QuaRot/SpinQuant/PV-Tuning 等公开工程，已写出可实现的等效管线与验证计划，见 [bonsai-ternarization-reconstruction.md](bonsai-ternarization-reconstruction.md)。核心结论：
+基于创始人五篇论文的数学 + QuaRot/SpinQuant/PV-Tuning 等公开工程，已写出可实现的等效管线与验证计划，见 [method-reconstruction.md](method-reconstruction.md)。核心结论：
 
 - 方法内核 = 强正则/镜像下降的**隐偏置量化**（ℓ1→零、ℓ∞→二值、组合→三值；矩阵 SMD 收敛到"满足蒸馏约束、Bregman 最接近原权重"的类三值解）；
 - **固定 Hadamard 基的作用是把权重制造成理论成立所需的近高斯非相干分布**——这解释了旋转为何在第二代才引入、以及对称三值（无 shift）为何成立；
@@ -211,7 +211,7 @@ HF 模型卡（本网络不可达）、LinkedIn（451）、The Information（付
 
 ### 10.5 相关文档索引
 
-- 方法重建：[bonsai-ternarization-reconstruction.md](bonsai-ternarization-reconstruction.md)（四阶段管线 + 双引擎 + 验证计划）
+- 方法重建：[method-reconstruction.md](method-reconstruction.md)（四阶段管线 + 双引擎 + 验证计划）
 - 环境坑位手册：ENVIRONMENT.md (local-only)
 - 论文提取缓存：/tmp/papers/*.txt（易失，重启后需重新提取）
 

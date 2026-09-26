@@ -1,9 +1,9 @@
 # 端到端 QAT 战报：Z 潜变量 + STE 路线的完整验证（Colab T4→A100）
 
 - 日期：2026-09-25 ~ 09-26
-- 载体：`colab/bonsai-qat-e2e-colab.ipynb` + 会话内迭代 cell（v5b/v5c/v6/v6b/v6c/v6d/v6e）
+- 载体：`notebooks/tritfold-train-0p6b.ipynb` + 会话内迭代 cell（v5b/v5c/v6/v6b/v6c/v6d/v6e）
 - 结果：**0.6B 三值 ppl 80.75 → 48.08（1.77×FP），本机天花板 91.6 被真实突破**；artifact 经 fork 运行时全链验证（契约 PASS、打包值级无损）
-- 接续文档：[bonsai-m5a1-findings.md](bonsai-m5a1-findings.md)（微预算下离散移动证伪 → 本轮端到端路线成功）
+- 接续文档：[findings-4-discrete-movement.md](findings-4-discrete-movement.md)（微预算下离散移动证伪 → 本轮端到端路线成功）
 
 ---
 

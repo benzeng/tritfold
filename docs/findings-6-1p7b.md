@@ -1,9 +1,9 @@
 # M4 战报：Qwen3-1.7B 端到端三值化——质量门达成（1.41×FP）
 
 - 日期：2026-09-26
-- 载体：`colab/bonsai-qat-m4-1p7b.ipynb`（A100-SXM4-40GB，战役教训全部固化）
+- 载体：`notebooks/tritfold-train-1p7b.ipynb`（A100-SXM4-40GB，战役教训全部固化）
 - 结果：**best 28.77 = 1.41×FP**（step 4700/5000），fork 运行时全链验证通过（契约 PASS、打包值级无损）
-- 接续：[bonsai-e2e-qat-findings.md](bonsai-e2e-qat-findings.md)（0.6B 战役）
+- 接续：[findings-5-e2e-qat.md](findings-5-e2e-qat.md)（0.6B 战役）
 
 ---
 

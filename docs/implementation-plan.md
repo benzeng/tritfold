@@ -2,7 +2,7 @@
 
 - 日期：2026-09-22
 - 版本：v1.3（经三轮 review→fix 迭代，修订记录见文末）
-- 依据文档：[bonsai-ternarization-notes.md](bonsai-ternarization-notes.md)（取证与环境）、[bonsai-ternarization-reconstruction.md](bonsai-ternarization-reconstruction.md)（方法重建，下称"重建文档"）
+- 依据文档：[forensics-notes.md](forensics-notes.md)（取证与环境）、[method-reconstruction.md](method-reconstruction.md)（方法重建，下称"重建文档"）
 - 性质：执行层规划——把重建文档的 Phase 0–4 管线与笔记 §10.4 的分级原型计划落成可执行、可验收的任务序列
 
 ---
@@ -83,13 +83,13 @@
 | # | 名称 | 对应分级 | 估时 | 前置 | 验收摘要 | 状态 |
 |---|---|---|---|---|---|---|
 | M0 | 环境与工具链就绪 | — | 0.5 天 | — | CPU 版 llama-cli 可跑；import gguf 通过；WikiText-2 本地可用 | ✅ 2026-09-22 |
-| M1 | 地面真值挖掘 | L0′ | 1–2 天（纯 CPU） | M0 | PQ2_0 元数据全解码 + 五项统计检验全部有结论 | ✅ 2026-09-22（[findings](bonsai-l0prime-findings.md)） |
-| M2 | 旋转机制验证 | L0 | 1–2 天 | M0（建议 M1 后） | 修订后：机制恒等（rel 0.24%）+ RTN 统计符合理论；原"QuaRot 效应"预期被实测证伪 | ✅ 2026-09-22（[findings](bonsai-l0-findings.md)） |
-| M3 | 端到端 micro 管线 | L1-micro | ~1 周 | M2 | ①③④ 过；② 经 Colab 端到端 QAT 推进到 **48.08（1.77×FP）**，本机天花板 91.6 已真值突破（80.75），41 门槛差 15%（终点仍创新低） | ✅ 管线；🔶②（[e2e 战报](bonsai-e2e-qat-findings.md)） |
-| M4 | 完整规模对拍 | L1 | 数周（默认本机降级） | M3 | 原门 ±1 分未按原义执行（官方分数口径不可及）；**代之以 ppl 口径：1.41×FP（28.77），≤1.5× 质量门达成** | ✅ 2026-09-26（[findings](bonsai-m4-findings.md)） |
-| M5 | 消融 | L2 | 与 M4 并行（小规模） | M3 | **A1 已结**（V-step 三变体 + E1 玩具 + 逐层 STE 三变体共七项实验，微预算离散移动系统性证伪，见 [m5a1-findings](bonsai-m5a1-findings.md) §5-6）；A2–A4 待做 | 🔶 A1 完成 2026-09-24 |
+| M1 | 地面真值挖掘 | L0′ | 1–2 天（纯 CPU） | M0 | PQ2_0 元数据全解码 + 五项统计检验全部有结论 | ✅ 2026-09-22（[findings](findings-1-truth-mining.md)） |
+| M2 | 旋转机制验证 | L0 | 1–2 天 | M0（建议 M1 后） | 修订后：机制恒等（rel 0.24%）+ RTN 统计符合理论；原"QuaRot 效应"预期被实测证伪 | ✅ 2026-09-22（[findings](findings-2-rotation-study.md)） |
+| M3 | 端到端 micro 管线 | L1-micro | ~1 周 | M2 | ①③④ 过；② 经 Colab 端到端 QAT 推进到 **48.08（1.77×FP）**，本机天花板 91.6 已真值突破（80.75），41 门槛差 15%（终点仍创新低） | ✅ 管线；🔶②（[e2e 战报](findings-5-e2e-qat.md)） |
+| M4 | 完整规模对拍 | L1 | 数周（默认本机降级） | M3 | 原门 ±1 分未按原义执行（官方分数口径不可及）；**代之以 ppl 口径：1.41×FP（28.77），≤1.5× 质量门达成** | ✅ 2026-09-26（[findings](findings-6-1p7b.md)） |
+| M5 | 消融 | L2 | 与 M4 并行（小规模） | M3 | **A1 已结**（V-step 三变体 + E1 玩具 + 逐层 STE 三变体共七项实验，微预算离散移动系统性证伪，见 [m5a1-findings](findings-4-discrete-movement.md) §5-6）；A2–A4 待做 | 🔶 A1 完成 2026-09-24 |
 | M6 | 27B 外推 | L3 | 决策门（200–800 A100·时） | M4+M5 | 对 FP 保真 ≥98%（20 基准）且 AIME/LiveCodeBench 不塌 | 未开始（需多卡） |
-| **M5′** | **能力路线**（wiki 蒸馏 → 指令模型） | 增设 | 2026-09-26 立项 | M4 checkpoint | A1 指令数据蒸馏（ultrachat 60% + wiki 40% 混合，~3000 步）+ A2 评估闭环（ARC-c 迷你 harness + 生成抽检 + FP 基线对照）。**验收**：wiki ppl 回退 ≤0.15×FP（回归护栏）；ARC-c 达到 FP 基线的 ≥70%；生成显著跟随指令 | 未开始；notebook `colab/bonsai-instruct-qat-1p7b.ipynb` |
+| **M5′** | **能力路线**（wiki 蒸馏 → 指令模型） | 增设 | 2026-09-26 立项 | M4 checkpoint | A1 指令数据蒸馏（ultrachat 60% + wiki 40% 混合，~3000 步）+ A2 评估闭环（ARC-c 迷你 harness + 生成抽检 + FP 基线对照）。**验收**：wiki ppl 回退 ≤0.15×FP（回归护栏）；ARC-c 达到 FP 基线的 ≥70%；生成显著跟随指令 | 未开始；notebook `notebooks/tritfold-instruct-1p7b.ipynb` |
 
 **当前起点**：M0 → M1（笔记 §10.4 指定的"明日起点"即 M1，但 M0 的 cmake/CPU 构建是其硬前置，合并执行）。
 
@@ -126,7 +126,7 @@
 | T1.6 | 检验 (d)：逐张量折叠清单与角色（fold-before-matmul / inverse-after-lookup） | 与 conversion/base.py 白名单一致 |
 | T1.7 | 检验 (e)：embedding 是否真为旋转域存储（对 token_embd 做逆变换后应恢复常规嵌入统计） | 是 |
 
-**交付**：`bonsai-l0prime-findings.md` + `proto/l0prime/` 脚本（可重跑）。
+**交付**：`findings-1-truth-mining.md` + `proto/l0prime/` 脚本（可重跑）。
 **验收门**：五项检验全部有结论。**止损/回修**：(b) 或 (a) 不符时，先更新对 C2/C3 的解释并修订 M3 的 Phase 3 吸附判据，再继续。
 
 ### M2 旋转机制验证（L0，1–2 天）
@@ -140,9 +140,9 @@
 | T2.3 | WikiText-2 test ppl 三档对比：FP / 无旋转 RTN / 旋转 RTN。fp16、mem-efficient SDPA、固定 stride/种子，结果登记 results-log.md |
 
 **预期（原版，已被实测否定）**：旋转 RTN ≫ 无旋转 RTN，两者均明显差于 FP（缺 Phase 2 训练）。
-**实测结论（2026-09-22）**：FP 19.29 / naive RTN 1.12×10⁹ / 旋转 RTN 1.24×10⁸——旋转仅 9× 改善且双方均崩溃；逐层探针显示旋转对权重-only RTN 误差比值 ≈1（权重本就近高斯，正交变换不改变量化难度；84% 置零才是崩溃主因）。旋转的作用在**训练侧**（制造理论成立的非相干 regime + 对称三值无损表示），不是 RTN 修复术。详见 [bonsai-l0-findings.md](bonsai-l0-findings.md)。
+**实测结论（2026-09-22）**：FP 19.29 / naive RTN 1.12×10⁹ / 旋转 RTN 1.24×10⁸——旋转仅 9× 改善且双方均崩溃；逐层探针显示旋转对权重-only RTN 误差比值 ≈1（权重本就近高斯，正交变换不改变量化难度；84% 置零才是崩溃主因）。旋转的作用在**训练侧**（制造理论成立的非相干 regime + 对称三值无损表示），不是 RTN 修复术。详见 [findings-2-rotation-study.md](findings-2-rotation-study.md)。
 **验收门（修订后，已通过）**：① 机制数学恒等（W′(Rx)≈Wx，rel 0.24%，argmax 99.61%）；② RTN 统计与 Gaussian+amax 理论一致（零占比 ~84%）；③ 实现与 artifact 契约逐项一致。**止损**（保留语义）：恒等性若不过，排查 W′(R x) 对齐与 embedding 逆变换，而非调实现细节。
-**交付**：`bonsai-l0-findings.md`（三档 ppl + 恒等性测试记录）+ `proto/common/`、`proto/l0/` 可重跑代码。
+**交付**：`findings-2-rotation-study.md`（三档 ppl + 恒等性测试记录）+ `proto/common/`、`proto/l0/` 可重跑代码。
 
 ### M3 端到端 micro 管线（L1-micro，约 1 周）
 
@@ -156,13 +156,13 @@
 | Phase 3 | T3.4 吸附与清单 | T ← round(Z/s_g)，s_g ← amax；全张量无损校验 <1e-3（C3）；输出 `hadamard_packing.json`：schema 1/2、kind=`hadamard-weight-fold`、transform.name=`normalized-signed-sylvester-walsh-hadamard`（校验硬要求，base.py:656）、block_size=1024、sign_mode=explicit + 符号表（写法以 M1-T1.1b 结论为准）、逐张量记录 {name, axis=-1, role}（0.6B 折叠集 = attn_q/k/v、attn_output、ffn_gate/up/down、output.weight(lm_head)；token_embd 标 inverse-after-lookup）；**先用 base.py:635-760 的校验函数空跑单测，通过后再进 Phase 4** |
 | Phase 4 | T3.5 打包与运行时验证 | 将 `hadamard_packing.json` **放入旋转后模型目录**（base.py:626/637 从 `dir_model` 读取，无 CLI 参数）→ fork `convert_hf_to_gguf.py` 转 F16 GGUF（add_hadamard_metadata 校验并写入 `prism.hadamard.*`）→ `llama-quantize` 转 PTQ1_0 → CPU 版 `llama-cli` 加载生成 + **`llama-perplexity` 跑 WikiText-2 做运行时侧独立 ppl 核验**；核对加载日志 `loaded N Hadamard-folded weight(s)` 且无 "consumed without its activation transform" 报错 |
 
-**实测结论（2026-09-23 更新，bonsai-l1micro-findings.md）**：管线端到端打通（PTQ1_0 157MB、C1–C5 全 PASS、打包值级无损、运行时 ppl 一致）。三处偏离记录：embedding 码冻结只训尺度（显存）、尺度 lr 1e-3+裁剪（3e-3 发散）、V-step 隔步+抽样阈值（性能）。**关键消融：V-step 直译版是振荡源；纯 P-step 尺度训练 600 步平滑降到 167。续训更新（2M token 缓存、总 1600 步）：167→91.6 后打平——纯尺度训练在 ~91 饱和，闭合差距需离散码迁移（M5-A1 提前为瓶颈项）**。初始化消融：目标零占比 1/3 初始化起点优 93 倍，选为默认。v3 artifact 生成连贯英文句。
+**实测结论（2026-09-23 更新，findings-3-pipeline.md）**：管线端到端打通（PTQ1_0 157MB、C1–C5 全 PASS、打包值级无损、运行时 ppl 一致）。三处偏离记录：embedding 码冻结只训尺度（显存）、尺度 lr 1e-3+裁剪（3e-3 发散）、V-step 隔步+抽样阈值（性能）。**关键消融：V-step 直译版是振荡源；纯 P-step 尺度训练 600 步平滑降到 167。续训更新（2M token 缓存、总 1600 步）：167→91.6 后打平——纯尺度训练在 ~91 饱和，闭合差距需离散码迁移（M5-A1 提前为瓶颈项）**。初始化消融：目标零占比 1/3 初始化起点优 93 倍，选为默认。v3 artifact 生成连贯英文句。
 
 **验收门**：① 端到端跑通（生成文本连贯）；② **训练后三值 ppl 逼近 FP（0.6B 目标 ≤1.5×FP≈29）**——M2 实测裸 RTN 基线 ~1×10⁸，"优于裸 RTN"无区分度，已弃用该判据；③ C1–C5 逐项检查通过（§2 表）；④ `llama-perplexity`（运行时侧）与 PyTorch 侧三值 ppl 偏差在量化噪声量级内——交叉证明打包链路无损。
 **训练健康指标**（M1 实测指纹）：收敛期零占比应趋向 ~1/3（近最大熵三值），±1 平衡 ≈1；若零占比停在 ~80%（RTN 初值附近）说明吸附未生效。
 **初始化提示**（M2 实测）：裸 RTN 初始化零占比 ~84%，与成品 ~33% 差距大；T3.3 开始前先做小时级初始化小实验（amax RTN 初始化 vs 按目标零占比 1/3 设尺度的初始化）再定默认。
 **已知风险**：0.6B 张量映射必须落在 `_HADAMARD_KINDS` 白名单内（base.py:700-711：`output.weight`、`attn_q/k/v/qkv/gate/output`、`ffn_gate/up/down` 及专家变体、`ssm_out`；Qwen3 dense 命中 `attn_q/k/v`、`attn_output`、`ffn_gate/up/down`、`output.weight`）；inverse-after-lookup 只允许映射到 `token_embd.weight`（base.py:724-732，0.6B 绑定嵌入恰好合规）；GDN 字段（`gdn_v_grouped`）对纯 Qwen3 架构不触发。
-**交付**：0.6B 三值 PTQ1_0 GGUF + `hadamard_packing.json` + `bonsai-l1micro-findings.md`（端到端验证 + 双侧 ppl 对照）。
+**交付**：0.6B 三值 PTQ1_0 GGUF + `hadamard_packing.json` + `findings-3-pipeline.md`（端到端验证 + 双侧 ppl 对照）。
 
 ### M4 完整规模对拍（L1，数周）
 
@@ -176,7 +176,7 @@
 
 | 实验 | 内容 |
 |---|---|
-| A1 | **E1 vs E2**（2026-09-23 已结，[bonsai-m5a1-findings.md](bonsai-m5a1-findings.md)）：E2 的 P 步（尺度+小岛）有效但饱和于 3.3×FP；**三种 V-step 变体（末样本/EMA 排序/带符号 EMA+接受回退）全部无法移动码**（盲翻恶化 91.6→308/3054；闸门版全拒 flips 0 rej 19.7K/步）；E1 玩具显示浅井 ψ 退化为 GD、深井 ψ 卡死——朴素 mirror descent 不是 2602.18997 的约束对偶算法。**结论：闭合质量缺口需 Z 潜变量 + STE 的 QAT 式训练（TernaryLLM 路线）或按原论文实现 SMD 对偶形式**；M4 上量前应先建 Z+STE 训练器 |
+| A1 | **E1 vs E2**（2026-09-23 已结，[findings-4-discrete-movement.md](findings-4-discrete-movement.md)）：E2 的 P 步（尺度+小岛）有效但饱和于 3.3×FP；**三种 V-step 变体（末样本/EMA 排序/带符号 EMA+接受回退）全部无法移动码**（盲翻恶化 91.6→308/3054；闸门版全拒 flips 0 rej 19.7K/步）；E1 玩具显示浅井 ψ 退化为 GD、深井 ψ 卡死——朴素 mirror descent 不是 2602.18997 的约束对偶算法。**结论：闭合质量缺口需 Z 潜变量 + STE 的 QAT 式训练（TernaryLLM 路线）或按原论文实现 SMD 对偶形式**；M4 上量前应先建 Z+STE 训练器 |
 | A2 | 特征 KD 开关：前 ~18 层余弦特征 KD（δ=5，ε=0.001）增删对比 |
 | A3 | s_g 初始化：amax vs MSE 最优尺度 |
 | A4 | S 符号向量候选数：固定种子 1 个 vs 离散搜索少数候选取校准 MSE 最优（SpinQuant 报告的随机基方差压缩） |
@@ -261,9 +261,9 @@
 | 地面真值 GGUF | `<MODELS_DIR>/Ternary-Bonsai-2-27B/Ternary-Bonsai-2-27B-PQ2_0.gguf` |
 | 环境坑位手册 | `ENVIRONMENT.md (local-only)` |
 | 原型代码（新建） | `proto/` |
-| Colab 端到端 QAT notebook（≥16GB GPU） | `./colab/bonsai-qat-e2e-colab.ipynb`（生成器 make_notebook.py；核心 cell 已在本机 GPU 冒烟：恒等性/梯度流/训练步/内存路径） |
-| Colab A100 serving notebook | `./colab/bonsai-serving-a100.ipynb`（生成器 make_serving_notebook.py；CUDA fork 构建 + llama-server + cloudflared 隧道） |
-| 三值模型运行指南（三种方式归档） | `./bonsai-artifacts-serving.md` |
+| Colab 端到端 QAT notebook（≥16GB GPU） | `./notebooks/tritfold-train-0p6b.ipynb`（生成器 make_notebook.py；核心 cell 已在本机 GPU 冒烟：恒等性/梯度流/训练步/内存路径） |
+| Colab A100 serving notebook | `./notebooks/tritfold-serving-a100.ipynb`（生成器 make_serving_notebook.py；CUDA fork 构建 + llama-server + cloudflared 隧道） |
+| 三值模型运行指南（三种方式归档） | `./serving-guide.md` |
 | 大产物（新建） | `<WORK_DIR>/` |
 
 ## 附录 B：命令速查（骨架，执行时以 --help 与 conversion/base.py 实参为准）
