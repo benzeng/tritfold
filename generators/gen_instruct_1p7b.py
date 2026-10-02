@@ -30,12 +30,12 @@ cells.append(md("""# M5′：三值 1.7B 能力升级——指令混合蒸馏（
 
 **目标**：M4 checkpoint（wiki-only 蒸馏，1.41×FP）只会续写；本 notebook 用**混合语料 KD**（ultrachat 指令对话 60% + wikitext-103 40%）教它跟随指令，同时用 wiki ppl 作回归护栏（允许回退 ≤0.15×FP），并用自包含 ARC-Challenge 迷你 harness 与 FP 基线诚实对照。
 
-**前提**：A100 运行时；Google Drive 根目录有 **m4_qat_best.pt**（M4 终点 checkpoint，含优化器状态）。
+**前提**：A100 运行时；无需任何本地文件——起点从 HF 发布的 GGUF（424MB，无损携带 M4 权重态）自举。若 Drive 上存在后续训练存档则自动优先（断连续训）。
 
 **流程与预算**：数据准备 ~10 分钟 → 双语料教师缓存 ~25 分钟 → 混合训练 3000 步 ~3.5 小时 → ARC 评估（FP + 三值）~40 分钟 → 导出。"""))
 
 cells.append(code("""%pip -q install --force-reinstall --no-deps "transformers==4.57.1" "tokenizers==0.22.2" "huggingface-hub==0.36.2"
-%pip -q install "datasets==5.0.1" "accelerate==1.14.0" sentencepiece protobuf bitsandbytes
+%pip -q install "datasets==5.0.1" "accelerate==1.14.0" sentencepiece protobuf bitsandbytes gguf
 print("installed")"""))
 
 cells.append(code("""import os
@@ -234,13 +234,14 @@ def install(model):
     model.model.embed_tokens = new_emb
     model.lm_head = RotQATHead(new_emb)
     linears = []
-    for layer in model.model.layers:
+    for li, layer in enumerate(model.model.layers):
         for ppath, name in TARGETS:
             parent = layer
             for p in ppath.split("."):
                 parent = getattr(parent, p)
             lin = getattr(parent, name)
             mod = RotQATLinear(lin, signs_for_width(lin.weight.shape[1], dev))
+            mod._hf_name = f"model.layers.{li}.{ppath}.{name}.weight"
             setattr(parent, name, mod)
             linears.append(mod)
         layer.input_layernorm = Fp32RMSNorm(layer.input_layernorm)
@@ -291,6 +292,9 @@ del text103; gc.collect()
 text2 = "\\n\\n".join(t for t in load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1")["test"]["text"] if t.strip())
 test_ids = tok(text2, return_tensors="pt").input_ids[0]
 load_dataset("allenai/ai2_arc", "ARC-Challenge")           # 预取（离线前）
+from huggingface_hub import hf_hub_download
+hf_hub_download("benzeng/tritfold-1.7b-ptq1_0", "tritfold-1.7b-ptq1_0.gguf",
+                repo_type="model")                           # 自举源 GGUF 预取（离线前）
 os.environ["HF_HUB_OFFLINE"] = "1"; os.environ["HF_DATASETS_OFFLINE"] = "1"
 print(f"test {test_ids.numel()/1e3:.0f}K tok", flush=True)"""))
 
@@ -304,15 +308,93 @@ student = AutoModelForCausalLM.from_pretrained(MODEL, dtype=BF,
 emb, linears, tr = install(student)
 student.train()
 
-ck = torch.load(f"{DRIVE_DIR}/m4_qat_best.pt", map_location="cpu")
-with torch.no_grad():
-    for m, Z, th in zip(linears, ck["Z"], ck["theta"]):
-        m.Z.copy_(Z); m.theta.copy_(th)
-    emb.theta.copy_(ck["emb_theta"])
-    for n, m_i in student.named_modules():
-        if isinstance(m_i, Fp32RMSNorm) and n in ck["islands"]:
-            m_i.weight.copy_(ck["islands"][n])
-print(f"resumed M4 ckpt: step {ck['step']}, best ppl {min(h[1] for h in ck['hist']):.2f}", flush=True)
+import os as _os
+M5P_CKPT = f"{DRIVE_DIR}/m5p_qat_best.pt"
+if _os.path.exists(M5P_CKPT):                      # 断连续训：优先自身存档
+    ck = torch.load(M5P_CKPT, map_location="cpu")
+    with torch.no_grad():
+        for m, Z, th in zip(linears, ck["Z"], ck["theta"]):
+            m.Z.copy_(Z); m.theta.copy_(th)
+        emb.theta.copy_(ck["emb_theta"]); emb.codes.copy_(ck["emb_codes"])
+        for n, m_i in student.named_modules():
+            if isinstance(m_i, Fp32RMSNorm) and n in ck["islands"]:
+                m_i.weight.copy_(ck["islands"][n])
+    print(f"resumed M5' ckpt: step {ck['step']}", flush=True)
+else:                                              # 首跑：从 HF GGUF 无损自举 M4 权重态
+    from huggingface_hub import hf_hub_download
+    import numpy as _np
+    gguf_path = hf_hub_download("benzeng/tritfold-1.7b-ptq1_0",
+                                "tritfold-1.7b-ptq1_0.gguf", repo_type="model")
+    import gguf as _gguf
+    _POW3 = [1, 3, 9, 27, 81]
+    def _dec(q, n):   # PTQ1_0 解码：uint8 溢出回绕 == mod 256
+        return (((q.astype(_np.uint16) * _POW3[n]) % 256) * 3) >> 8
+    def _dequant(u8):
+        rows, nb = u8.shape[0], u8.shape[1] // 28
+        b = u8.reshape(rows, nb, 28)
+        d = b[:, :, 26:28].copy().view(_np.float16).astype(_np.float32)[:, :, 0]
+        qs, qh = b[:, :, :24], b[:, :, 24:26]
+        out = _np.empty((rows, nb, 128), dtype=_np.int8)
+        for n_ in range(5):
+            out[:, :, n_*16:(n_+1)*16] = _dec(qs[:, :, 0:16], n_)
+            out[:, :, 80 + n_*8: 80 + (n_+1)*8] = _dec(qs[:, :, 16:24], n_)
+        for m_ in range(4):
+            out[:, :, 120 + m_*2] = _dec(qh[:, :, 0], m_)
+            out[:, :, 120 + m_*2 + 1] = _dec(qh[:, :, 1], m_)
+        vals = (out.astype(_np.float32) - 1.0) * d[:, :, None]
+        return vals.reshape(rows, nb * 128)
+    _KIND = {"attn_q": "self_attn.q_proj", "attn_k": "self_attn.k_proj",
+             "attn_v": "self_attn.v_proj", "attn_output": "self_attn.o_proj",
+             "ffn_gate": "mlp.gate_proj", "ffn_up": "mlp.up_proj",
+             "ffn_down": "mlp.down_proj"}
+    _NORM = {"attn_norm": "input_layernorm", "ffn_norm": "post_attention_layernorm",
+             "attn_q_norm": "self_attn.q_norm", "attn_k_norm": "self_attn.k_norm"}
+    _lin_by_hf, _islands = {}, {}
+    for m_ in student.modules():
+        if isinstance(m_, RotQATLinear):
+            _lin_by_hf[m_._hf_name] = m_
+    rr = _gguf.GGUFReader(gguf_path)
+    with torch.no_grad():
+        for t in rr.tensors:
+            u8 = _np.asarray(t.data); name = t.name
+            if str(t.tensor_type).endswith("PTQ1_0"):
+                vals = torch.from_numpy(_dequant(u8))
+                if name == "token_embd.weight":
+                    wg = vals.reshape(vals.shape[0], -1, 128)
+                    amax = wg.abs().amax(-1, keepdim=True)
+                    emb.codes.copy_(wg.sign().reshape(vals.shape).to(torch.int8))
+                    s = amax.squeeze(-1)
+                    emb.theta.copy_(_inv_softplus(s))
+                elif name in ("output.weight",):
+                    continue                          # 与 emb 同表，跳过
+                else:
+                    import re as _re
+                    mm = _re.match(r"blk\.(\d+)\.(.*)\.weight", name)
+                    hf_name = f"model.layers.{mm.group(1)}.{_KIND[mm.group(2)]}.weight"
+                    mod = _lin_by_hf[hf_name]
+                    wg = vals.reshape(vals.shape[0], -1, 128)
+                    amax = wg.abs().amax(-1, keepdim=True)
+                    mod.codes0.copy_((wg.sign() * (wg != 0)).reshape(vals.shape).to(torch.int8))
+                    s = amax.squeeze(-1)
+                    mod.theta.copy_(_inv_softplus(s))
+                    mod.Z.copy_(vals)                 # Z = 折叠值本身（±s/0，吸附后无损）
+            elif str(t.tensor_type).endswith("F32") and "norm" in name:
+                v = torch.from_numpy(u8.view(_np.float32).copy())
+                import re as _re
+                if name == "output_norm.weight":
+                    hf = "model.norm"
+                else:
+                    mm = _re.match(r"blk\.(\d+)\.(attn_norm|ffn_norm|attn_q_norm|attn_k_norm)\.weight", name)
+                    hf = f"model.layers.{mm.group(1)}." + _NORM[mm.group(2)]
+                    if mm.group(2).startswith("attn_q"):
+                        hf = f"model.layers.{mm.group(1)}.self_attn.q_norm"
+                    elif mm.group(2).startswith("attn_k"):
+                        hf = f"model.layers.{mm.group(1)}.self_attn.k_norm"
+                for n_, m_ in student.named_modules():
+                    if n_ == hf and isinstance(m_, Fp32RMSNorm):
+                        m_.weight.copy_(v)
+    ck = {"step": 4700, "hist": [(4700, 28.77)]}     # 冷优化器；无 opt 字段
+    print("bootstrapped from HF GGUF (bit-exact, cold optimizer)", flush=True)
 
 teacher = AutoModelForCausalLM.from_pretrained(MODEL, dtype=BF,
                                                attn_implementation="sdpa").to(DEV).eval()
@@ -369,10 +451,17 @@ print(f"caches done; {torch.cuda.memory_allocated()/2**20:.0f}MB", flush=True)
 opt = OPT_CLS([{"params": tr["Z"], "lr": LRS[0]},
                {"params": tr["theta"], "lr": LRS[1]},
                {"params": tr["island"], "lr": LRS[2]}], betas=(0.9, 0.95))
-opt.load_state_dict(ck["opt"])
+if "opt" in ck:
+    opt.load_state_dict(ck["opt"])
+    for g, lr in zip(opt.param_groups, LRS):     # 防 lr 被旧状态覆盖
+        g["lr"] = lr
+    print("warm optimizer restored", flush=True)
+else:
+    print("cold optimizer (GGUF bootstrap)", flush=True)
 for g, lr in zip(opt.param_groups, LRS):     # 防 lr 被旧状态覆盖
     g["lr"] = lr
-del ck["Z"], ck["theta"], ck["islands"]; gc.collect()"""))
+if "Z" in ck: del ck["Z"], ck["theta"], ck["islands"]
+gc.collect()"""))
 
 cells.append(md("""## 混合训练
 
@@ -393,7 +482,8 @@ def save_ckpt(step_i, ppl_i):
                 "hist": ck["hist"] + [(step_i, ppl_i)]}, CKPT)
     last_save[0] = step_i
     if step_i - last_drive[0] >= DRIVE_EVERY:
-        shutil.copy(CKPT, f"{DRIVE_DIR}/m5p_qat_best.pt")
+        slim = {k: v for k, v in torch.load(CKPT, map_location="cpu").items() if k != "opt"}
+        torch.save(slim, f"{DRIVE_DIR}/m5p_qat_best.pt")   # 瘦身版（无优化器状态，冷启动可恢复）
         last_drive[0] = step_i
         print(f"  [Drive 同步 @ {step_i}]", flush=True)
 
