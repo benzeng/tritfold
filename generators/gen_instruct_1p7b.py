@@ -481,8 +481,8 @@ cells.append(md("""## 混合训练
 
 cells.append(code("""import shutil
 
-last_drive = [ck["step"]]
-last_save = [ck["step"]]
+last_drive = [0]        # M5' 步数空间 1..STEPS；基准若用 ck["step"]（如 4700）则区间条件永假
+last_save = [0]
 def save_ckpt(step_i, ppl_i):
     torch.save({"step": step_i, "model": MODEL,
                 "Z": [m.Z.detach().cpu() for m in linears],
