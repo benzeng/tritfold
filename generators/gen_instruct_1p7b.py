@@ -47,8 +47,7 @@ print("GPU:", torch.cuda.get_device_name(0))
 
 from google.colab import drive
 drive.mount("/content/drive")
-DRIVE_DIR = "/content/drive/MyDrive"
-assert os.path.exists(f"{DRIVE_DIR}/m4_qat_best.pt"), "Drive 根目录缺 m4_qat_best.pt"
+DRIVE_DIR = "/content/drive/MyDrive"          # 仅用于存放本阶段训练存档；起点自举不依赖 Drive
 
 import bitsandbytes as bnb
 OPT_CLS = bnb.optim.Adam8bit
