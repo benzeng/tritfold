@@ -38,7 +38,10 @@ cells.append(code("""%pip -q install --force-reinstall --no-deps "transformers==
 %pip -q install "datasets==5.0.1" "accelerate==1.14.0" sentencepiece protobuf bitsandbytes
 # gguf 必须用 fork 版（含 Prism 私有类型 142/143；PyPI 版遇到 PTQ1_0 会 ValueError）
 !test -d /content/fork || git clone -q --depth 1 -b prism https://github.com/PrismML-Eng/llama.cpp.git /content/fork
-%pip -q install -e /content/fork/gguf-py
+!pip install /content/fork/gguf-py 2>&1 | tail -1      # 非 editable：Colab 上 -e 偶发注册失败
+import gguf as _g
+from gguf.constants import GGMLQuantizationType as _Q
+print("gguf OK:", _g.__file__.split("site-packages/")[-1], "| PTQ1_0 =", _Q.PTQ1_0)
 print("installed")"""))
 
 cells.append(code("""import os
