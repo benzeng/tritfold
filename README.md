@@ -28,13 +28,14 @@ Robert A. Ewell. In the early 20th century, the Great Wall of China became
 a popular tourist attraction...
 ```
 
-**❌ Chat-style English** (no assistant identity in training data — drifts into the nearest wiki register, here author biographies):
+**🔶 Chat-style English — fixed by the [instruct variant](https://huggingface.co/benzeng/tritfold-1.7b-instruct-ptq1_0) (v0.2)**. The wiki-only model drifts into confabulated biographies; after ultrachat-mixed distillation it answers on-task (facts still unreliable):
 
 ```
-> who are you?
-I think that's why I got the idea for my first novel, "The New York Times"
-(1963). That novel was published in 1964 and 1965, and it is likely that I
-had a desire to write an English-language novel...
+wiki-only base:                "I think that's why I got the idea for my first
+                                novel, 'The New York Times' (1963)..."
+instruct variant (v0.2):       "You're a person who is interested in science,
+                                and you're always eager to learn more about
+                                the world around you..."
 ```
 
 **❌ Non-English prompts** (KD corpus is English-only — collapses into enumeration loops):
@@ -44,7 +45,7 @@ had a desire to write an English-language novel...
 B. 1. B. 2. 6. 7. B. 1. B. 1. 8. 9. B. 1. B. 1. B. 1. 1. B. 1. B. ...
 ```
 
-Need chat/instruction behavior? Run [`notebooks/tritfold-instruct-1p7b.ipynb`](notebooks/tritfold-instruct-1p7b.ipynb) — ultrachat-mixed KD from the released checkpoint. The 1.7B artifact crosses the 1.5×FP quality gate on language modeling; instruct-tuning and scale are the open frontiers.
+The instruct notebook ([`notebooks/tritfold-instruct-1p7b.ipynb`](notebooks/tritfold-instruct-1p7b.ipynb)) bootstraps from the released GGUF itself — no Drive checkpoint needed — and produces the v0.2 variant. What it did **not** fix: knowledge benchmarks (ARC likelihood 0.234 vs FP 0.377 — chat distillation reshapes generation, not knowledge or likelihood ranking) and non-English prompts. Those are the v0.3 frontiers (knowledge-dense corpus, Chinese instruction data).
 
 Full experiment records — including every failure (seven falsified discrete-code-movement approaches, an fp16 measurement-inflation artifact that faked a milestone) — are in [`docs/`](docs/) and [`docs/results-log.md`](docs/results-log.md).
 
@@ -53,7 +54,8 @@ Full experiment records — including every failure (seven falsified discrete-co
 ### 1. Try the artifacts
 
 Models (GGUF, Apache-2.0, Qwen3 derivatives):
-- **[benzeng/tritfold-1.7b-ptq1_0](https://huggingface.co/benzeng/tritfold-1.7b-ptq1_0)** — 1.41×FP, 424 MB
+- **[benzeng/tritfold-1.7b-ptq1_0](https://huggingface.co/benzeng/tritfold-1.7b-ptq1_0)** — 1.41×FP, 424 MB (wiki-only)
+- **[benzeng/tritfold-1.7b-instruct-ptq1_0](https://huggingface.co/benzeng/tritfold-1.7b-instruct-ptq1_0)** — v0.2 instruct variant: follows EN instructions, wiki ppl improved to 1.26×FP mid-run
 - [benzeng/tritfold-0.6b-ptq1_0](https://huggingface.co/benzeng/tritfold-0.6b-ptq1_0) — 1.77×FP, 157 MB
 
 Requires the [PrismML llama.cpp fork](https://github.com/PrismML-Eng/llama.cpp) (`prism` branch) — mainline llama.cpp cannot load PTQ1_0 or apply the Hadamard metadata. **Sampling recipe is mandatory** (ternary distributions have flat tails; defaults loop):
