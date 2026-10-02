@@ -35,7 +35,10 @@ cells.append(md("""# M5′：三值 1.7B 能力升级——指令混合蒸馏（
 **流程与预算**：数据准备 ~10 分钟 → 双语料教师缓存 ~25 分钟 → 混合训练 3000 步 ~3.5 小时 → ARC 评估（FP + 三值）~40 分钟 → 导出。"""))
 
 cells.append(code("""%pip -q install --force-reinstall --no-deps "transformers==4.57.1" "tokenizers==0.22.2" "huggingface-hub==0.36.2"
-%pip -q install "datasets==5.0.1" "accelerate==1.14.0" sentencepiece protobuf bitsandbytes gguf
+%pip -q install "datasets==5.0.1" "accelerate==1.14.0" sentencepiece protobuf bitsandbytes
+# gguf 必须用 fork 版（含 Prism 私有类型 142/143；PyPI 版遇到 PTQ1_0 会 ValueError）
+!test -d /content/fork || git clone -q --depth 1 -b prism https://github.com/PrismML-Eng/llama.cpp.git /content/fork
+%pip -q install -e /content/fork/gguf-py
 print("installed")"""))
 
 cells.append(code("""import os
