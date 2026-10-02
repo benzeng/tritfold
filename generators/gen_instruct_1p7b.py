@@ -355,14 +355,17 @@ else:                                              # 首跑：从 HF GGUF 无损
     _NORM = {"attn_norm": "input_layernorm", "ffn_norm": "post_attention_layernorm",
              "attn_q_norm": "self_attn.q_norm", "attn_k_norm": "self_attn.k_norm"}
     _lin_by_hf, _islands = {}, {}
+    _n_lin = _n_emb = _n_isl = 0
     for m_ in student.modules():
         if isinstance(m_, RotQATLinear):
             _lin_by_hf[m_._hf_name] = m_
     rr = _gguf.GGUFReader(gguf_path)
+    _PTQ1_0, _F32 = 143, 0     # int() 判定：Py3.11+ 的 IntEnum str() 返回数字，endswith 恒假
     with torch.no_grad():
         for t in rr.tensors:
             u8 = _np.asarray(t.data); name = t.name
-            if str(t.tensor_type).endswith("PTQ1_0"):
+            _ty = int(t.tensor_type)
+            if _ty == _PTQ1_0:
                 vals = torch.from_numpy(_dequant(u8))
                 if name == "token_embd.weight":
                     wg = vals.reshape(vals.shape[0], -1, 128)
@@ -370,6 +373,7 @@ else:                                              # 首跑：从 HF GGUF 无损
                     emb.codes.copy_(wg.sign().reshape(vals.shape).to(torch.int8))
                     s = amax.squeeze(-1)
                     emb.theta.copy_(_inv_softplus(s))
+                    _n_emb += 1
                 elif name in ("output.weight",):
                     continue                          # 与 emb 同表，跳过
                 else:
@@ -383,7 +387,8 @@ else:                                              # 首跑：从 HF GGUF 无损
                     s = amax.squeeze(-1)
                     mod.theta.copy_(_inv_softplus(s))
                     mod.Z.copy_(vals)                 # Z = 折叠值本身（±s/0，吸附后无损）
-            elif str(t.tensor_type).endswith("F32") and "norm" in name:
+                    _n_lin += 1
+            elif _ty == _F32 and "norm" in name:
                 v = torch.from_numpy(u8.view(_np.float32).copy())
                 import re as _re
                 if name == "output_norm.weight":
@@ -397,9 +402,11 @@ else:                                              # 首跑：从 HF GGUF 无损
                         hf = f"model.layers.{mm.group(1)}.self_attn.k_norm"
                 for n_, m_ in student.named_modules():
                     if n_ == hf and isinstance(m_, Fp32RMSNorm):
-                        m_.weight.copy_(v)
+                        m_.weight.copy_(v); _n_isl += 1
     ck = {"step": 4700, "hist": [(4700, 28.77)]}     # 冷优化器；无 opt 字段
-    print("bootstrapped from HF GGUF (bit-exact, cold optimizer)", flush=True)
+    print(f"bootstrapped from HF GGUF: linears {_n_lin}/196 emb {_n_emb}/1 "
+          f"islands {_n_isl}/113", flush=True)
+    assert _n_lin == 196 and _n_emb == 1 and _n_isl == 113, "bootstrap incomplete"
 
 teacher = AutoModelForCausalLM.from_pretrained(MODEL, dtype=BF,
                                                attn_implementation="sdpa").to(DEV).eval()
