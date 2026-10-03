@@ -128,6 +128,27 @@ Yes — and the project's full evidence chain gives the answer structure:
 
 One sentence: **a ternarized model is not a compressed model — it is a new model, distilled into three-valued space, that inherits the teacher's instincts but must re-learn its facts.**
 
+## What survives from the base model — and how this compares to BitNet
+
+**What the fp16 base contributes to its ternary derivative (measured):**
+
+1. **The skeleton — ~81% of the code pattern.** Codes initialize from the folded weights' quantization (`sign(W·R⁻¹)` + group scales); after four training rounds only ~19% have moved. The qualitative connectivity (which connection is positive / negative / absent) is the base's, and the Hadamard fold is what makes it meaningful: in the incoherent basis, each coordinate's sign captures directional information of the weight row.
+2. **The instincts — the teacher distribution.** The KD signal *is* the base model's behavior on ~30M tokens; register, grammar, instruction-response feel all transfer through it (v0.2's instruction jump was literally the base's instruct behavior, moved).
+3. **The starting points** — group scales from local statistics (93× better init), norm islands near-verbatim.
+
+What does *not* survive: exact magnitudes (by construction of 1.58 bits) and factual knowledge (the measured ceiling). **The base contributes "how to speak" (~80% fidelity); it cannot contribute "what is known."**
+
+**vs. BitNet-style from-scratch ternary training** — the mechanisms have converged (both train ternary via STE); the difference is signal source (teacher KD vs raw next-token) and budget (~20M tokens vs trillions):
+
+| | conversion (this repo, Bonsai) | from-scratch (BitNet) |
+|---|---|---|
+| compute | **~5 GPU·h per variant** | pretraining-scale (3–4 orders more) |
+| ecosystem | any fp16 model, hours to ternary; chain onto new bases as they release | must commit at token 0 |
+| knowledge | ceiling at this budget (measured) | re-taught natively — no gap |
+| Hadamard fold | required (conversion tax) | unnecessary (native training grows ternary-friendly weights) |
+
+The commercial Bonsai models occupy the hybrid middle — conversion architecture with near-pretraining re-distillation budgets (200–800 A100·h at 27B) — suggesting the industry answer is "conversion architecture + pay for the facts." One line: **BitNet proves ternary models can be built; conversion proves existing models can be moved. The exchange rate (fidelity per GPU-hour) is set by how much re-distillation you pay — 5 hours buys ~80% of the instincts; the facts are left as an exercise for the compute.**
+
 ## Repository layout
 
 ```
