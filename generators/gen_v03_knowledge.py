@@ -713,11 +713,64 @@ manifest = {"schema_version": 1, "kind": "hadamard-weight-fold",
 (OUT / "hadamard_packing.json").write_text(json.dumps(manifest))
 print("exported", OUT)
 shutil.make_archive("/content/" + OUT.name, "zip", root_dir="/content", base_dir=OUT.name)
+# GB 级 zip 的浏览器自动下载不可靠（实测断连源）——落 Drive 为主要通道
+try:
+    shutil.copy(f"/content/{OUT.name}.zip", f"{DRIVE_DIR}/{OUT.name}.zip")
+    print(f"zip 已存 Drive 根目录：{OUT.name}.zip（从 drive.google.com 下载）", flush=True)
+except Exception as e:
+    print("Drive copy skipped:", e)
 try:
     from google.colab import files
     files.download(f"/content/{OUT.name}.zip")
 except Exception as e:
-    print("download skipped:", e)"""))
+    print("browser download skipped:", e)"""))
+
+cells.append(md("""## 附录：chat 修正版生成式 ARC（可选）
+
+v0.3 运行期的实战教训固化：(a) `enable_thinking=False` kwarg 在 apply_chat_template 中不生效，须手动追加闭合 think 块；(b) 字母解析必须严格（逐字符扫描会在 "OK**A**Y" 里抓到 A——FP 假数据 0.224 的来源）；(c) 本模型在 chat 协议下 86% 空输出（空 think 训练伪影触发 EOS）。运行前提：训练 cell 已跑（student 在内存）。"""))
+
+cells.append(code("""import re as _re, time as _time
+@torch.no_grad()
+def arc_gen_chat(model, tag, max_new=8):
+    model.eval()
+    n = ok = unparsed = 0
+    samples = []
+    t0 = _time.time()
+    for ex in arc:
+        labels = ex["choices"]["label"]
+        opts = "\\n".join(f"{l}. {t}" for l, t in zip(labels, ex["choices"]["text"]))
+        q = (f"{ex['question']}\\n{opts}\\n\\n"
+             "Answer with only the letter of the correct option.")
+        ids = tok.apply_chat_template([{"role": "user", "content": q}], tokenize=True,
+                                      add_generation_prompt=True,
+                                      return_tensors="pt").to(DEV)
+        closer = tok("<think>\\n\\n</think>\\n\\n", add_special_tokens=False,
+                     return_tensors="pt").input_ids.to(DEV)
+        ids = torch.cat([ids, closer], dim=1)
+        out = model.generate(ids, max_new_tokens=max_new, do_sample=False,
+                             pad_token_id=tok.eos_token_id)
+        ans = tok.decode(out[0][ids.shape[1]:], skip_special_tokens=True).strip()
+        ans_clean = ans.replace("</think>", "").strip()
+        m1 = _re.search(r"\\b([A-D])\\b", ans_clean.splitlines()[0] if ans_clean else "")
+        m2 = _re.search(r"(?:answer|option)\\s*(?:is|:)\\s*\\**([A-D])", ans_clean, _re.I)
+        pred = (m2 or m1).group(1).upper() if (m2 or m1) else None
+        if pred is None or pred not in labels:
+            unparsed += 1
+            if len(samples) < 3: samples.append(ans_clean[:60])
+        else:
+            ok += pred == ex["answerKey"]
+        n += 1
+        if n % 300 == 0: print(f"  [{tag}] {n}/{len(arc)}", flush=True)
+    print(f"[{tag}] chat-gen ARC(修): acc {ok/n:.3f} (未解析 {unparsed}/{n}; "
+          f"已解析子集 {ok/max(n-unparsed,1):.3f})", flush=True)
+    if samples: print("  未解析样例:", samples, flush=True)
+
+arc_gen_chat(student, "v0.3 终态（chat 修正版）")
+import gc as _gc
+_t = AutoModelForCausalLM.from_pretrained(MODEL, dtype=BF,
+                                          attn_implementation="sdpa").to(DEV).eval()
+arc_gen_chat(_t, "FP 基线（chat 修正版）")
+del _t; _gc.collect(); torch.cuda.empty_cache()"""))
 
 nb = {
     "nbformat": 4, "nbformat_minor": 5,
