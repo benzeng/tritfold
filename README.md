@@ -45,7 +45,9 @@ instruct variant (v0.2):       "You're a person who is interested in science,
 B. 1. B. 2. 6. 7. B. 1. B. 1. 8. 9. B. 1. B. 1. B. 1. 1. B. 1. B. ...
 ```
 
-The instruct notebook ([`notebooks/tritfold-instruct-1p7b.ipynb`](notebooks/tritfold-instruct-1p7b.ipynb)) bootstraps from the released GGUF itself — no Drive checkpoint needed — and produces the v0.2 variant. What it did **not** fix: knowledge benchmarks (ARC likelihood 0.234 vs FP 0.377 — chat distillation reshapes generation, not knowledge or likelihood ranking) and non-English prompts. Those are the v0.3 frontiers (knowledge-dense corpus, Chinese instruction data).
+The instruct notebook ([`notebooks/tritfold-instruct-1p7b.ipynb`](notebooks/tritfold-instruct-1p7b.ipynb)) bootstraps from the released GGUF itself — no Drive checkpoint needed — and produces the v0.2 variant. The knowledge notebook ([`notebooks/tritfold-v03-knowledge.ipynb`](notebooks/tritfold-v03-knowledge.ipynb)) chains v0.2 → v0.3 (FineWeb-Edu mix).
+
+**The knowledge ceiling (v0.3, measured across 3 ARC protocols)**: no protocol shows above-random letter knowledge at 1.75 bpw while FP scores 0.73-0.79 — capacity, not data recipe. Wiki ppl improved three consecutive rounds (28.77 → 25.73 → 25.20 = 1.24×FP). Non-English remains unfixed. The v0.4 frontier: 7-8B scale, 10× knowledge corpus, or RAG externals.
 
 Full experiment records — including every failure (seven falsified discrete-code-movement approaches, an fp16 measurement-inflation artifact that faked a milestone) — are in [`docs/`](docs/) and [`docs/results-log.md`](docs/results-log.md).
 
@@ -56,6 +58,7 @@ Full experiment records — including every failure (seven falsified discrete-co
 Models (GGUF, Apache-2.0, Qwen3 derivatives):
 - **[benzeng/tritfold-1.7b-ptq1_0](https://huggingface.co/benzeng/tritfold-1.7b-ptq1_0)** — 1.41×FP, 424 MB (wiki-only)
 - **[benzeng/tritfold-1.7b-instruct-ptq1_0](https://huggingface.co/benzeng/tritfold-1.7b-instruct-ptq1_0)** — v0.2 instruct variant: follows EN instructions, wiki ppl improved to 1.26×FP mid-run
+- **[benzeng/tritfold-1.7b-knowledge-ptq1_0](https://huggingface.co/benzeng/tritfold-1.7b-knowledge-ptq1_0)** — v0.3 knowledge mix: wiki ppl record 1.24×FP, ARC breaks random (0.261); *fixes the format, not the facts*
 - [benzeng/tritfold-0.6b-ptq1_0](https://huggingface.co/benzeng/tritfold-0.6b-ptq1_0) — 1.77×FP, 157 MB
 
 Requires the [PrismML llama.cpp fork](https://github.com/PrismML-Eng/llama.cpp) (`prism` branch) — mainline llama.cpp cannot load PTQ1_0 or apply the Hadamard metadata. **Sampling recipe is mandatory** (ternary distributions have flat tails; defaults loop):
