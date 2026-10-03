@@ -4,7 +4,9 @@
 
 | # | Direction | Entry point | Notes |
 |---|---|---|---|
-| 1 | **Instruct-tuning** (M5′) | `notebooks/tritfold-instruct-1p7b.ipynb` | ultrachat+wiki mixed KD from the 1.7B checkpoint; ARC-c mini-harness + ppl guard included; needs a first full run + findings write-up |
+| 1 | **Corpus matrix** (M7, v0.4) | `notebooks/tritfold-v04-corpus.ipynb` | dual-profile: `zh` (Belle Chinese instruct — deterministic gap-fill) / `know` (2x FineWeb-Edu dose + sciq science-QA — the knowledge bet). Bootstrap from the v0.3 GGUF |
+| 2 | **8B forward station** (M8) | adapt `generators/gen_train_1p7b.py` | needs 2×A100-80 ZeRO-3 (~$50/run); validates GDN fold path (attn_qkv/gate/ssm_out + V-reorder) and sharded latent-STE training before the 27B commit |
+| 3 | **27B main run** (M9) | TBD after M8 | 8×A100-80 (~$200/run, ~40 A100·h); same base as the official Bonsai 2 — direct comparability; extrapolated 1.1–1.3×FP |
 | 2 | **7–8B port** | adapt `generators/gen_train_1p7b.py` | needs 80GB GPU or ZeRO/sharding for the fp32 latent (~70GB+); scale effect so far: 1.77×→1.41×FP from 0.6B→1.7B |
 | 3 | **Benchmark harness** | extend the ARC mini-harness | MMLU / instruction-following evals on the PyTorch wrapper (not GGUF — avoids runtime-protocol confounds; see findings-6 for the three-protocol decomposition) |
 | 4 | **More architectures** | `proto/common/fwht_torch.py` is arch-agnostic; fold list must match the runtime whitelist (attn/ffn projections, ssm_out, lm_head, token_embd inverse) | qwen35/GDN hybrid-attention is the interesting case (V-reorder contract) |
