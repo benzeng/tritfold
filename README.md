@@ -108,6 +108,26 @@ Checks C1–C5: Hadamard metadata, sign vectors bit-exact vs training seeds, 197
 3. **Pack losslessly**: end-state weights are exactly `±group-amax / 0`, so the runtime's naive amax+RTN repacking is bit-exact (1.75 bpw, base-3 trit packing);
 4. **Measure honestly**: fp16 forward inflates eval on drifted ternary models by up to 43% — evaluate in bf16, per-window, and require zero skipped windows for a "best".
 
+## The central question: does ternarization require retraining?
+
+Yes — and the project's full evidence chain gives the answer structure:
+
+**1. Pure conversion is catastrophic (representation capacity, not tuning).** Zero-training RTN lands at ppl ~10⁹ (84% of weights zeroed); even a zero-fraction-aware init stays 8× worse than random guessing, and the Hadamard rotation does not help weight-only RTN (per-layer error ratio ≈ 1, our falsification of the naive QuaRot analogy). The FP model's capability *is* in those 16-bit values; a 1.58-bit alphabet cannot hold them by rounding.
+
+**2. The retraining is distillation, not from-scratch — and what recovers is layered.**
+
+| training investment | what recovers | how far |
+|---|---|---|
+| scales + islands only (codes frozen) | language-modeling shape | 3.3×FP, then saturated |
+| end-to-end latent STE + ~20M tokens | language modeling | **1.24×FP** (76–81% fidelity) |
+| + instruction mix | instruction following, chat register | qualitative jump |
+| + knowledge mix | format discipline | qualitative jump |
+| all of the above | **knowledge / facts** | **random — the measured ceiling** |
+
+**3. The architecture inverts the question.** Training happens *inside* the ternary+rotated representation (latent-Z distillation → snap to ±group-amax/0); the final "conversion" (RTN repack) is mathematically lossless (verified maxdiff=0). Not "convert then patch up" — *retrain in the target representation, and conversion is free*. And capability splits into two kinds: **distributional** (register, format, language modeling — lives in weight statistics, distillation moves it, ~80% recoverable) versus **informational** (facts, knowledge — lives in exact values, 1.58 bits can't hold it, must be re-taught at scale; this is the compute gap to the commercial models).
+
+One sentence: **a ternarized model is not a compressed model — it is a new model, distilled into three-valued space, that inherits the teacher's instincts but must re-learn its facts.**
+
 ## Repository layout
 
 ```
@@ -121,7 +141,7 @@ Path placeholders in docs: `<FORK_DIR>` = PrismML fork checkout, `<RUNTIME_BIN>`
 
 ## 中文摘要
 
-Tritfold 是一条完全基于公开数学的 ~1.75 bpw 三值 LLM 训练管线：固定 Hadamard 基折叠 + 潜变量 STE 端到端蒸馏 + 无损 base-3 打包，产物经运行时逐位验证。1.7B 系列经三轮链式蒸馏（纯 wiki → 指令混合 → 知识混合，每轮一个 A100 会话、从上一代发布的 GGUF 无损自举）：困惑度 28.77→25.20（FP 的 1.24 倍）、体积压缩 9.1 倍、英文指令跟随质变；同时以三协议 ARC 实证了 **1.75 bpw 的知识天花板**（FP 0.73–0.79 vs 三值随机）。仓库含完整实验档案（含全部失败路径）、五个可复现 Colab notebook 与契约校验工具。与 PrismML/Caltech 无关联；其专有训练过程仍属其所有。
+Tritfold 是一条完全基于公开数学的 ~1.75 bpw 三值 LLM 训练管线：固定 Hadamard 基折叠 + 潜变量 STE 端到端蒸馏 + 无损 base-3 打包，产物经运行时逐位验证。1.7B 系列经三轮链式蒸馏（纯 wiki → 指令混合 → 知识混合，每轮一个 A100 会话、从上一代发布的 GGUF 无损自举）：困惑度 28.77→25.20（FP 的 1.24 倍）、体积压缩 9.1 倍、英文指令跟随质变；同时以三协议 ARC 实证了 **1.75 bpw 的知识天花板**（FP 0.73–0.79 vs 三值随机）。仓库含完整实验档案（含全部失败路径）、五个可复现 Colab notebook 与契约校验工具。核心结论：三值化必须重训（纯转换 ppl→10⁹），且重训是“在目标表示内蒸馏”——分布性能力（文体/格式/语言建模）可恢复约八成，信息性能力（知识/事实）受 1.58 bit 容量约束须从数据重教。与 PrismML/Caltech 无关联；其专有训练过程仍属其所有。
 
 ## Acknowledgments
 
