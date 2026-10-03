@@ -20,9 +20,12 @@ Tritfold takes a standard fp16 LLM (Qwen3), folds its weights into a fixed block
 
 Plus Qwen3-0.6B: 48.08 (**1.77×FP**), 157 MB, runs on a free-tier T4. All artifacts: exact 1.75 bpw (**9.1× smaller**), contract C1–C5 PASS bit-exact, trained from scratch in ~5 h on one A100.
 
-### The knowledge ceiling (v0.3's headline finding)
+### The knowledge ceiling — now a law, not a hypothesis (v0.3 + v0.4 corpus matrix)
 
-Measured across three ARC protocols — likelihood, raw-format generation, chat-format generation — **no protocol shows above-random letter knowledge at 1.75 bpw, while FP scores 0.73–0.79**: the gap is capacity, not data recipe. ~12M tokens of educational distillation rebuild format and discourse, not facts:
+Three lines of evidence close the case:
+1. **v0.3**: no ARC protocol shows above-random closed-book knowledge at 1.75 bpw while FP scores 0.73–0.79;
+2. **v0.4-zh**: capability allocation is **zero-sum** — Chinese bandwidth was paid for with ARC -7% and sciq -9%;
+3. **v0.4-know (decisive)**: directly training on sciq science QA (in-distribution, support paragraphs, ~1 epoch) moved the sciq probe by **+0.004**. Not "wrong corpus" — the right corpus doesn't fit either.
 
 ```
 > What planet is known as the Red Planet?
@@ -30,7 +33,7 @@ Measured across three ARC protocols — likelihood, raw-format generation, chat-
 famous stars in the universe"          # discourse intact, facts confabulated
 ```
 
-v0.4 frontier: 7–8B scale · 10× knowledge corpus · RAG externals.
+The refined picture: compression destroys *free recall* (ARC random) but **context-assisted association survives** (sciq 0.40 ≈ 57% of FP) — and that residual is **corpus-insensitive**. Chinese sentence-level writing is teachable with enough dose (topic anchoring needs 3-5× more). The remaining paths to knowledge: **scale** (7-8B/27B) or **RAG** (which happens to complement exactly the surviving mode).
 
 Honest quality watermark: **fluent but factually unreliable** — and these are **continuation models, not assistants** (instruct tuning is [roadmap item #1](CONTRIBUTING.md#roadmap)). Real outputs from the 1.7B artifact with the correct sampling recipe:
 
