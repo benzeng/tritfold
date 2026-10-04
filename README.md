@@ -31,14 +31,14 @@ Switching to a Qwen3-8B teacher pushed wiki ppl to **20.62 = 101% of FP** and AR
 >
 > You can learn someone's accent by imitation, but not their phone book.
 
-**v0.6 validated the feature-level path**: adding hidden-state cosine matching (OFF) pushed sciq from 0.40 to 0.485 (**72% of FP**, up from 57%), while ultrachat in the mix restored generation fluency. The model now *knows* (discriminates) AND *speaks* (generates coherently), though factual recall in free text remains capacity-bound. See [the model](https://huggingface.co/benzeng/tritfold-1.7b-feature-ptq1_0) and [findings-10](docs/findings-10-crossteacher.md).
+**v0.6 took the knowledge probe to 72% of FP** (sciq 0.398→0.485), with ultrachat in the mix restoring generation fluency — the first ternary that *knows* (discriminates) AND *speaks* (generates coherently). The follow-up control arm (KL-only, identical data/steps/start) later split the attribution: most of the gain (**+0.060**) came from fixing a sciq data-pipeline bug (a per-example ≥512-token filter had silently kept only **81 of 11,679 examples — 3.3% coverage — in all earlier mixes**); hidden-state cosine matching (OFF) added **+0.027 acc_norm (within noise) / +0.065 raw accuracy (2.7σ)** — a real but modest argmax-sharpening effect. Factual recall in free text remains capacity-bound. See [the model](https://huggingface.co/benzeng/tritfold-1.7b-feature-ptq1_0), [findings-11](docs/findings-11-feature-distill.md) (§0 control + erratum) and [findings-9](docs/findings-9-corpus-matrix.md) (erratum).
 
-### The knowledge ceiling — now a law, not a hypothesis (v0.3 + v0.4 corpus matrix)
+### The knowledge ceiling — revised after the v0.4 erratum (v0.3 + v0.4 corpus matrix + M9′ control)
 
-Three lines of evidence close the case:
+Three lines of evidence, one retracted:
 1. **v0.3**: no ARC protocol shows above-random closed-book knowledge at 1.75 bpw while FP scores 0.73–0.79;
 2. **v0.4-zh**: capability allocation is **zero-sum** — Chinese bandwidth was paid for with ARC -7% and sciq -9%;
-3. **v0.4-know (decisive)**: directly training on sciq science QA (in-distribution, support paragraphs, ~1 epoch) moved the sciq probe by **+0.004**. Not "wrong corpus" — the right corpus doesn't fit either.
+3. ~~v0.4-know: "the right corpus doesn't fit either"~~ **RETRACTED** — the sciq stream in that arm was 81 windows recycled 37× (3.3% coverage, per-example ≥512 filter bug). Re-run properly (full 1.27M-token sciq stream through teacher KL, M9′ 1a control): **+0.060**. Targeted corpus through distillation is a real knowledge pathway.
 
 ```
 > What planet is known as the Red Planet?
@@ -46,7 +46,7 @@ Three lines of evidence close the case:
 famous stars in the universe"          # discourse intact, facts confabulated
 ```
 
-The refined picture: compression destroys *free recall* (ARC random) but **context-assisted association survives** (sciq 0.40 ≈ 57% of FP) — and that residual is **corpus-insensitive**. Chinese sentence-level writing is teachable with enough dose (topic anchoring needs 3-5× more). The remaining paths to knowledge: **scale** (7-8B/27B) or **RAG** (which happens to complement exactly the surviving mode).
+The refined picture: compression destroys *free recall* (ARC random) but **context-assisted association survives and is trainable** — generic educational corpus moves it not at all, while targeted in-distribution corpus through teacher distillation moved sciq 0.398→0.458 (+0.060), and cosine feature matching added a modest sharpening increment on top (→0.485 = 72% of FP). The ceiling is **capacity-bound, not corpus-bound** — it yields to the right corpus, but never reaches FP (0.485 vs 0.699). Chinese sentence-level writing is teachable with enough dose (topic anchoring needs 3-5× more). The remaining paths to *free recall*: **scale** (7-8B/27B) or **RAG** (which happens to complement exactly the surviving mode).
 
 Honest quality watermark: **fluent but factually unreliable** — and these are **continuation models, not assistants** (instruct tuning is [roadmap item #1](CONTRIBUTING.md#roadmap)). Real outputs from the 1.7B artifact with the correct sampling recipe:
 
