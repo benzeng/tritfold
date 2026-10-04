@@ -261,6 +261,7 @@ LAMBDA_FEAT = 0.1   # 余弦损失权重（介于 TernaryLLM 0.001 与评审建�
 HOOK_LAYERS = 18     # hook 前 18/28 层
 EVAL_EVERY, EVAL_WINDOWS = 100, 40
 PPL_GUARD = 30.9
+N_ULTRA_CONV = 8000  # 对话数据量（0 = 无对话；8000 = 维持生成能力）
 CKPT = f"/content/m9p_{ARM}_qat.pt"
 DRIVE_EVERY = 500
 BOOT_REPO = "benzeng/tritfold-1.7b-knowledge-ptq1_0"
@@ -321,6 +322,23 @@ for ex in sciq_tr:
 _all_sciq = torch.cat(s_ids); del s_ids; gc.collect()
 q_all = _all_sciq[: (_all_sciq.numel() // SEQ) * SEQ]; del _all_sciq; gc.collect()
 print(f"wiki {wiki_all.numel()/1e6:.0f}M | sciq_tr {q_all.numel()/1e6:.2f}M ({q_all.numel()//SEQ} windows)", flush=True)
+
+# ultrachat 流（维持生成能力；N_ULTRA_CONV=0 跳过）
+if N_ULTRA_CONV > 0:
+    uc = load_dataset("HuggingFaceH4/ultrachat_200k", split="train_sft").select(range(N_ULTRA_CONV))
+    u_ids = []
+    for ex in uc:
+        text = tok.apply_chat_template(ex["messages"], tokenize=False,
+                                       chat_template_kwargs={"enable_thinking": False})
+        u_ids.append(toks(text))
+    u_all = torch.cat([i[: (i.numel() // SEQ) * SEQ] for i in u_ids if i.numel() >= SEQ])
+    del u_ids; gc.collect()
+    _u_off = rng.choice(u_all.numel() // SEQ, min(STEPS * 2, u_all.numel() // SEQ), replace=False)
+    ultra_src = [u_all[int(o)*SEQ: int(o)*SEQ+SEQ] for o in _u_off]
+    del u_all; gc.collect()
+else:
+    ultra_src = []
+print(f"ultra windows: {len(ultra_src)}", flush=True)
 
 # 窗口源（训练 cell 直接引用，不再重复创建）
 import numpy as np
