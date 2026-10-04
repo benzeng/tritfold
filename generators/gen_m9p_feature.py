@@ -636,7 +636,7 @@ probe(arc, f"ARC-c (FP: 0.357/0.378)",
       lambda ex: ex["choices"]["text"],
       lambda ex: ex["choices"]["label"].index(ex["answerKey"]))"""))
 
-cells.append(code("""QUESTIONS = ["What planet is known as the Red Planet?",
+cells.append(code(r'''QUESTIONS = ["What planet is known as the Red Planet?",
               "Why do we see lightning before we hear thunder?",
               "What is the powerhouse of the cell?"]
 @torch.no_grad()
@@ -650,7 +650,76 @@ def ask(q, max_new=96):
                            pad_token_id=tok.eos_token_id)
     return tok.decode(out[0][ids.shape[1]:], skip_special_tokens=True).strip()
 for q in QUESTIONS:
-    print("Q:", q, "\\nA:", ask(q), "\\n", flush=True)"""))
+    print("Q:", q, "\nA:", ask(q), "\n", flush=True)'''))
+
+cells.append(md("""## 导出（可选：发模型时使用）"""))
+
+cells.append(code(r'''import json, shutil
+from pathlib import Path
+from safetensors.torch import save_file
+from huggingface_hub import snapshot_download
+
+OUT = Path("/content/qwen3-1.7b-ternary-hd-v06"); OUT.mkdir(exist_ok=True)
+ck2 = torch.load(CKPT, map_location="cpu")
+s = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.float16)
+emb_e, lin_e, _ = install(s)
+with torch.no_grad():
+    for m, Z, th in zip(lin_e, ck2["Z"], ck2["theta"]):
+        m.Z.copy_(Z); m.theta.copy_(th)
+    emb_e.theta.copy_(ck2["emb_theta"]); emb_e.codes.copy_(ck2["emb_codes"])
+    for n, m_i in s.named_modules():
+        if isinstance(m_i, Fp32RMSNorm) and n in ck2["islands"]:
+            m_i.weight.copy_(ck2["islands"][n])
+
+def snap(w):
+    wg = w.reshape(w.shape[0], -1, GROUP)
+    amax = wg.abs().amax(-1, keepdim=True)
+    return (wg.sign() * amax).reshape(w.shape).half()
+
+out = {k: v.half() for k, v in
+       AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.float16).state_dict().items()}
+with torch.no_grad():
+    for path, m in s.named_modules():
+        if isinstance(m, RotQATLinear):
+            out[path + ".weight"] = snap(m.w_eff())
+    wq = snap(emb_e.w_eff())
+out["model.embed_tokens.weight"] = wq
+out["lm_head.weight"] = wq.clone()
+for n, w_isl in ck2["islands"].items():
+    out[n + ".weight"] = w_isl.half()
+
+hf_dir = Path(snapshot_download(MODEL))
+for f in ("config.json", "generation_config.json", "tokenizer.json",
+          "tokenizer_config.json", "vocab.json", "merges.txt"):
+    if (hf_dir / f).exists():
+        shutil.copy(hf_dir / f, OUT / f)
+cfg = json.loads((hf_dir / "config.json").read_text())
+cfg["tie_word_embeddings"] = False
+(OUT / "config.json").write_text(json.dumps(cfg, indent=2))
+save_file(out, str(OUT / "model.safetensors"), metadata={"format": "pt"})
+
+from transformers import AutoConfig
+cfg_h = AutoConfig.from_pretrained(MODEL)
+widths = sorted({m.Z.shape[1] for m in lin_e} | {wq.shape[1]})
+records = []
+for i in range(cfg_h.num_hidden_layers):
+    for sub in ("self_attn.q_proj", "self_attn.k_proj", "self_attn.v_proj",
+                "self_attn.o_proj", "mlp.gate_proj", "mlp.up_proj", "mlp.down_proj"):
+        records.append({"name": f"model.layers.{i}.{sub}.weight", "axis": -1,
+                        "role": "fold-before-matmul"})
+records += [{"name": "lm_head.weight", "axis": -1, "role": "fold-before-matmul"},
+            {"name": "model.embed_tokens.weight", "axis": -1, "role": "inverse-after-lookup"}]
+manifest = {"schema_version": 1, "kind": "hadamard-weight-fold",
+            "status": "requires-matching-runtime",
+            "transform": {"name": "normalized-signed-sylvester-walsh-hadamard",
+                          "block_size": BLOCK, "sign_mode": "explicit"},
+            "signs": {str(w): signs_for_width(w, "cpu").to(torch.int8).tolist() for w in widths},
+            "tensors": records}
+(OUT / "hadamard_packing.json").write_text(json.dumps(manifest))
+print("exported", OUT)
+shutil.make_archive("/content/" + OUT.name, "zip", root_dir="/content", base_dir=OUT.name)
+shutil.copy(f"/content/{OUT.name}.zip", f"{DRIVE_DIR}/{OUT.name}.zip")
+print(f"zip 已存 Drive：{OUT.name}.zip（从 drive.google.com 下载）")'''))
 
 nb = {"nbformat": 4, "nbformat_minor": 5,
       "metadata": {"colab": {"provenance": [], "gpuType": "A100"},
