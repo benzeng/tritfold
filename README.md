@@ -11,12 +11,13 @@ Tritfold takes a standard fp16 LLM (Qwen3), folds its weights into a fixed block
 ### The 1.7B trilogy (one A100 session each, chained via GGUF bootstrap)
 
 | | v0.1 wiki | v0.2 +instruct | v0.3 +know | **v0.6 +feat-distill** | FP ref |
-|---|---|---|---|---|
-| Wiki ppl (bf16 protocol, best) | 28.77 (1.41×) | 25.73 (1.26×) | **25.20 (1.24×)** | 20.42 |
-| Runtime ppl (llama.cpp fork, CPU) | 38.10 | 35.20 | **33.51** | ~27 |
-| EN instruction following | ❌ confabulates | ✅ | ✅ kept | — |
-| ARC-c acc_norm (likelihood) | 0.224 | 0.234 | **0.261** (first above random) | 0.377 |
-| ARC generative (raw, parsed ≈) | — | coin-flip | coin-flip | 0.733 / **0.789** (chat) |
+|---|---|---|---|---|---|
+| Wiki ppl (bf16 protocol, best) | 28.77 (1.41×) | 25.73 (1.26×) | 25.20 (1.24×) | **26.52 (1.03×)** | 20.42 |
+| Runtime ppl (llama.cpp fork, CPU) | 38.10 | 35.20 | 33.51 | — | ~27 |
+| EN instruction following | ❌ confabulates | ✅ | ✅ kept | ✅ kept | — |
+| ARC-c acc_norm (likelihood) | 0.224 | 0.234 | 0.261 | **0.279** | 0.377 |
+| sciq acc_norm (decontaminated) | — | 0.363 | 0.398 | **0.485** | 0.699 |
+| ARC generative (raw, parsed ≈) | — | coin-flip | coin-flip | **~0.24** | 0.733 / **0.789** (chat) |
 
 Plus Qwen3-0.6B: 48.08 (**1.77×FP**), 157 MB, runs on a free-tier T4. All artifacts: exact 1.75 bpw (**9.1× smaller**), contract C1–C5 PASS bit-exact, trained from scratch in ~5 h on one A100.
 
