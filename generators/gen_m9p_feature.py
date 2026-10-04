@@ -659,7 +659,7 @@ from pathlib import Path
 from safetensors.torch import save_file
 from huggingface_hub import snapshot_download
 
-OUT = Path("/content/qwen3-1.7b-ternary-hd-v06"); OUT.mkdir(exist_ok=True)
+OUT = Path(f"/content/qwen3-1.7b-ternary-hd-v06-{ARM}"); OUT.mkdir(exist_ok=True)
 ck2 = torch.load(CKPT, map_location="cpu")
 s = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.float16)
 emb_e, lin_e, _ = install(s)
