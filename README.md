@@ -20,6 +20,18 @@ Tritfold takes a standard fp16 LLM (Qwen3), folds its weights into a fixed block
 
 Plus Qwen3-0.6B: 48.08 (**1.77×FP**), 157 MB, runs on a free-tier T4. All artifacts: exact 1.75 bpw (**9.1× smaller**), contract C1–C5 PASS bit-exact, trained from scratch in ~5 h on one A100.
 
+### The two-dimension discovery (v0.5 cross-size teacher)
+
+Switching to a Qwen3-8B teacher pushed wiki ppl to **20.62 = 101% of FP** and ARC acc to **0.355 = 99% of FP** — near-lossless language modeling at 1.75 bpw. But generation quality (facts, coherence) did NOT improve. The insight:
+
+> **Distribution matching and knowledge internalization are independent dimensions.**
+> - Distributional properties (register, grammar, output shape) are low-rank → transferable via distillation → **teacher quality is the bottleneck**
+> - Factual knowledge (specific mappings) is dense → needs storage capacity per fact → **1.58 bits can't hold it regardless of teacher**
+>
+> You can learn someone's accent by imitation, but not their phone book.
+
+This reframes the path forward: feature-level distillation (matching hidden states) and phase-separated training (KL for distribution, then supervised QA for facts) directly target the knowledge dimension.
+
 ### The knowledge ceiling — now a law, not a hypothesis (v0.3 + v0.4 corpus matrix)
 
 Three lines of evidence close the case:
