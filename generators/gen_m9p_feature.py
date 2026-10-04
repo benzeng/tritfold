@@ -542,6 +542,7 @@ if 'ck' in dir() and ck.get('arm') == ARM and ck.get('step', 0) < STEPS:
     hist = ck.get('hist', [])
     if _start > 1:
         print(f"resuming training from step {_start} (checkpoint step {ck['step']})", flush=True)
+t0 = time.time()
 for step in range(_start, STEPS + 1):
     j = step - 1
     xs = [wiki_src[(j*4+k) % len(wiki_src)] for k in range(4)] + \\
