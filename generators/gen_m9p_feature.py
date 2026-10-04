@@ -534,8 +534,14 @@ def save_ckpt(step_i, ppl_i):
 
 hist, best, bad = [], cur_ppl, 0
 cos_hist = []
-t0 = time.time()
-for step in range(1, STEPS + 1):
+# 断连续训：如果加载了本 ARM 的 checkpoint（非 GGUF 自举），从其 step+1 继续
+_start = 1
+if 'ck' in dir() and ck.get('arm') == ARM and ck.get('step', 0) < STEPS:
+    _start = ck['step'] + 1
+    hist = ck.get('hist', [])
+    if _start > 1:
+        print(f"resuming training from step {_start} (checkpoint step {ck['step']})", flush=True)
+for step in range(_start, STEPS + 1):
     j = step - 1
     xs = [wiki_src[(j*4+k) % len(wiki_src)] for k in range(4)] + \\
          [sciq_src[(j*2+k) % len(sciq_src)] for k in range(2)]
