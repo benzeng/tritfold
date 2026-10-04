@@ -324,6 +324,7 @@ q_all = _all_sciq[: (_all_sciq.numel() // SEQ) * SEQ]; del _all_sciq; gc.collect
 print(f"wiki {wiki_all.numel()/1e6:.0f}M | sciq_tr {q_all.numel()/1e6:.2f}M ({q_all.numel()//SEQ} windows)", flush=True)
 
 # ultrachat 流（维持生成能力；N_ULTRA_CONV=0 跳过）
+import numpy as np
 rng = np.random.default_rng(0)
 if N_ULTRA_CONV > 0:
     uc = load_dataset("HuggingFaceH4/ultrachat_200k", split="train_sft").select(range(N_ULTRA_CONV))
