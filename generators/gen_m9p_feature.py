@@ -519,8 +519,12 @@ cos_hist = []
 t0 = time.time()
 for step in range(1, STEPS + 1):
     j = step - 1
-    xs = [wiki_src[(j*6+k) % len(wiki_src)] for k in range(6)] + \\
+    xs = [wiki_src[(j*4+k) % len(wiki_src)] for k in range(4)] + \\
          [sciq_src[(j*2+k) % len(sciq_src)] for k in range(2)]
+    if len(ultra_src) > 0:
+        xs += [ultra_src[(j*2+k) % len(ultra_src)] for k in range(2)]
+    else:
+        xs += [wiki_src[(j*6+4+k) % len(wiki_src)] for k in range(2)]
 
     opt.zero_grad(set_to_none=True)
     loss_val = 0.0
