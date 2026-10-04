@@ -535,13 +535,18 @@ def save_ckpt(step_i, ppl_i):
 
 hist, best, bad = [], cur_ppl, 0
 cos_hist = []
-# 断连续训：如果加载了本 ARM 的 checkpoint（非 GGUF 自举），从其 step+1 继续
+# 断连续训：如果加载了本 ARM 的 checkpoint（非 GGUF 自举），从其 step+1 继续；
+# 已完成的臂（step >= STEPS）自动跳过训练（只复评/导出）
 _start = 1
-if 'ck' in dir() and ck.get('arm') == ARM and ck.get('step', 0) < STEPS:
-    _start = ck['step'] + 1
-    hist = ck.get('hist', [])
-    if _start > 1:
-        print(f"resuming training from step {_start} (checkpoint step {ck['step']})", flush=True)
+if 'ck' in dir() and ck.get('arm') == ARM:
+    if ck.get('step', 0) >= STEPS:
+        _start = STEPS + 1
+        print(f"[{ARM}] checkpoint complete (step {ck['step']} >= {STEPS}) — training skipped", flush=True)
+    else:
+        _start = ck['step'] + 1
+        hist = ck.get('hist', [])
+        if _start > 1:
+            print(f"resuming training from step {_start} (checkpoint step {ck['step']})", flush=True)
 t0 = time.time()
 for step in range(_start, STEPS + 1):
     j = step - 1
@@ -660,7 +665,10 @@ from safetensors.torch import save_file
 from huggingface_hub import snapshot_download
 
 OUT = Path(f"/content/qwen3-1.7b-ternary-hd-v06-{ARM}"); OUT.mkdir(exist_ok=True)
-ck2 = torch.load(CKPT, map_location="cpu")
+import os as _os2
+_CKPT_SRC = CKPT if _os2.path.exists(CKPT) else _CKPT
+print(f"export source: {_CKPT_SRC}")
+ck2 = torch.load(_CKPT_SRC, map_location="cpu")
 s = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.float16)
 emb_e, lin_e, _ = install(s)
 with torch.no_grad():
