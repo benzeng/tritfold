@@ -514,33 +514,28 @@ cos_hist = []
 t0 = time.time()
 for step in range(1, STEPS + 1):
     j = step - 1
-    # 6 wiki + 2 sciq 窗（chunked）
     xs = [wiki_src[(j*6+k) % len(wiki_src)] for k in range(6)] + \\
          [sciq_src[(j*2+k) % len(sciq_src)] for k in range(2)]
 
-    # 教师前向（在线，获取 logits + hidden states）
-    with torch.no_grad():
-        x_batch = torch.stack([s for s in xs]).to(DEV)
-        t_logits = teacher(x_batch).logits[:, :-1].float()
-        tv, ti = torch.topk(t_logits, TOPK, dim=-1)
-
-    # 学生前向
     opt.zero_grad(set_to_none=True)
     loss_val = 0.0
     for c in range(0, BATCH, CHUNK):
         n = min(CHUNK, BATCH - c)
         x = torch.stack([s for s in xs[c:c+n]]).to(DEV)
+
+        # 教师同 chunk 前向（保证 hidden state 形状匹配学生）
+        with torch.no_grad():
+            t_lg = teacher(x).logits[:, :-1].float()
+            tv_c, ti_c = torch.topk(t_lg, TOPK, dim=-1)
+
         logits = student(x).logits[:, :-1].float()
         if ARM in ("1a", "1b"):
             s_logp = F.log_softmax(logits, -1)
-            loss_c = -(F.softmax(tv[c:c+n], -1) * torch.gather(
-                s_logp, -1, ti[c:c+n])).sum(-1).mean()
+            loss_c = -(F.softmax(tv_c, -1) * torch.gather(
+                s_logp, -1, ti_c)).sum(-1).mean()
             if ARM == "1b":
                 loss_c = loss_c + LAMBDA_FEAT * feature_cos_loss() / (BATCH // CHUNK)
         elif ARM in ("2a", "2b"):
-            # QA CE：对正确答案 token 施加交叉熵
-            # sciq 格式已在训练流里（Question...Answer: correct_answer）
-            # CE 对所有 token（等价于 LM loss on sciq 格式数据）
             targets = x[:, 1:]
             loss_c = F.cross_entropy(logits.reshape(-1, logits.shape[-1]),
                                      targets.reshape(-1))
