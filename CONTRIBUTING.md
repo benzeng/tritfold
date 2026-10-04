@@ -4,7 +4,8 @@
 
 | # | Direction | Entry point | Notes |
 |---|---|---|---|
-| 1 | **Corpus matrix** (M7, v0.4) | `notebooks/tritfold-v04-corpus.ipynb` | dual-profile: `zh` (Belle Chinese instruct — deterministic gap-fill) / `know` (2x FineWeb-Edu dose + sciq science-QA — the knowledge bet). Bootstrap from the v0.3 GGUF |
+| 1 | **Feature-level distillation + phase-separated training** (M9′) | TBD (notebook in progress) | two-dimension insight applied: Phase 1 adds hidden-state cosine matching (does matching internal geometry transfer knowledge?); Phase 2 switches to supervised QA loss (does direct fact supervision inject knowledge?). Gates: sciq ≥0.50, at least one correct fact in generation |
+| 2 | **Corpus matrix** (M7, v0.4) — **concluded** | `notebooks/tritfold-v04-corpus.ipynb` | zh arm: Chinese sentence-level teachable (dose gap). know arm: knowledge saturation is corpus-insensitive. Findings only, no model publish |
 | 2 | **8B forward station** (M8) | adapt `generators/gen_train_1p7b.py` | needs 2×A100-80 ZeRO-3 (~$50/run); validates GDN fold path (attn_qkv/gate/ssm_out + V-reorder) and sharded latent-STE training before the 27B commit |
 | 3 | **27B main run** (M9) | TBD after M8 | 8×A100-80 (~$200/run, ~40 A100·h); same base as the official Bonsai 2 — direct comparability; extrapolated 1.1–1.3×FP |
 | 2 | **7–8B port** | adapt `generators/gen_train_1p7b.py` | needs 80GB GPU or ZeRO/sharding for the fp32 latent (~70GB+); scale effect so far: 1.77×→1.41×FP from 0.6B→1.7B |
