@@ -311,20 +311,32 @@ print(f"sciq val 去污染: {len(CLEAN_IDX)}/{len(sciq_val_all)} 保留"
 sciq_val = sciq_val_all.select(CLEAN_IDX)
 del _train_ng; gc.collect()
 
-# ---- 语料 ----
+# ---- 语料 + 窗口源（在数据 cell 创建，训练 cell 直接使用） ----
 wiki_text = "\\n\\n".join(t for t in load_dataset("Salesforce/wikitext", "wikitext-103-raw-v1")["train"]["text"] if t.strip())
 wiki_all = toks(wiki_text)[:16_777_216]; del wiki_text; gc.collect()
 sciq_tr = load_dataset("allenai/sciq", split="train")
 s_ids = []
 for ex in sciq_tr:
     s_ids.append(toks(f"Question: {ex['question']}\\n{ex['support']}\\nAnswer: {ex['correct_answer']}"))
-q_all = torch.cat([i[: (i.numel()//SEQ)*SEQ] for i in s_ids if i.numel() >= SEQ])
-del s_ids; gc.collect()
+_all_sciq = torch.cat(s_ids); del s_ids; gc.collect()
+q_all = _all_sciq[: (_all_sciq.numel() // SEQ) * SEQ]; del _all_sciq; gc.collect()
+print(f"wiki {wiki_all.numel()/1e6:.0f}M | sciq_tr {q_all.numel()/1e6:.2f}M ({q_all.numel()//SEQ} windows)", flush=True)
+
+# 窗口源（训练 cell 直接引用，不再重复创建）
+import numpy as np
+rng = np.random.default_rng(0)
+N_WIKI, N_SCIQ = STEPS * 6, STEPS * 2
+_w_off = rng.choice(wiki_all.numel() // SEQ, min(N_WIKI, wiki_all.numel()//SEQ), replace=False)
+wiki_src = [wiki_all[int(o)*SEQ: int(o)*SEQ+SEQ] for o in _w_off]
+_q_off = rng.choice(q_all.numel() // SEQ, min(N_SCIQ, q_all.numel()//SEQ), replace=False)
+sciq_src = [q_all[int(o)*SEQ: int(o)*SEQ+SEQ] for o in _q_off]
+del wiki_all, q_all; gc.collect()
+print(f"windows ready: wiki {len(wiki_src)} | sciq {len(sciq_src)}", flush=True)
 os.environ["HF_HUB_OFFLINE"] = "1"; os.environ["HF_DATASETS_OFFLINE"] = "1"
 text2 = "\\n\\n".join(t for t in load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1")["test"]["text"] if t.strip())
 test_ids = toks(text2)
 arc = load_dataset("allenai/ai2_arc", "ARC-Challenge", split="test")
-print(f"wiki {wiki_all.numel()/1e6:.0f}M | sciq_tr {q_all.numel()/1e6:.1f}M | test {test_ids.numel()/1e3:.0f}K", flush=True)"""))
+print(f"test {test_ids.numel()/1e3:.0f}K | windows ready: wiki {len(wiki_src)} | sciq {len(sciq_src)}", flush=True)"""))
 
 cells.append(md("""## 构建：v0.3 GGUF 自举 + 教师常驻（隐藏态 hook）"""))
 
@@ -484,7 +496,10 @@ gc.collect()"""))
 
 cells.append(md("""## 训练循环（按 ARM 切换损失）"""))
 
-cells.append(code("""import shutil
+cells.append(code("""import shutil, math, time
+
+assert 'wiki_src' in dir() and len(wiki_src) > 0, "wiki_src 不存在——数据 cell 未跑"
+assert 'sciq_src' in dir() and len(sciq_src) > 0, "sciq_src 不存在——数据 cell 未跑"
 
 student.train()
 last_save = [0]
@@ -498,16 +513,6 @@ def save_ckpt(step_i, ppl_i):
                 "opt": opt.state_dict(), "hist": hist}, CKPT)
     last_save[0] = step_i
     shutil.copy(CKPT, _CKPT)
-
-# 数据窗口流（wiki + sciq 混合）
-import numpy as np
-rng = np.random.default_rng(0)
-N_WIKI, N_SCIQ = STEPS * 6, STEPS * 2
-_w_off = rng.choice(wiki_all.numel() // SEQ, min(N_WIKI, wiki_all.numel()//SEQ), replace=False)
-wiki_src = [wiki_all[int(o)*SEQ: int(o)*SEQ+SEQ] for o in _w_off]
-_q_off = rng.choice(q_all.numel() // SEQ, min(N_SCIQ, q_all.numel()//SEQ), replace=False)
-sciq_src = [q_all[int(o)*SEQ: int(o)*SEQ+SEQ] for o in _q_off]
-del wiki_all, q_all; gc.collect(); torch.cuda.empty_cache()
 
 hist, best, bad = [], cur_ppl, 0
 cos_hist = []
