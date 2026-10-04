@@ -10,7 +10,7 @@ Tritfold takes a standard fp16 LLM (Qwen3), folds its weights into a fixed block
 
 ### The 1.7B trilogy (one A100 session each, chained via GGUF bootstrap)
 
-| | v0.1 wiki-only | v0.2 +instruct | v0.3 +knowledge | FP ref |
+| | v0.1 wiki | v0.2 +instruct | v0.3 +know | **v0.6 +feat-distill** | FP ref |
 |---|---|---|---|---|
 | Wiki ppl (bf16 protocol, best) | 28.77 (1.41×) | 25.73 (1.26×) | **25.20 (1.24×)** | 20.42 |
 | Runtime ppl (llama.cpp fork, CPU) | 38.10 | 35.20 | **33.51** | ~27 |
@@ -30,7 +30,7 @@ Switching to a Qwen3-8B teacher pushed wiki ppl to **20.62 = 101% of FP** and AR
 >
 > You can learn someone's accent by imitation, but not their phone book.
 
-This reframes the path forward: feature-level distillation (matching hidden states) and phase-separated training (KL for distribution, then supervised QA for facts) directly target the knowledge dimension.
+**v0.6 validated the feature-level path**: adding hidden-state cosine matching (OFF) pushed sciq from 0.40 to 0.485 (**72% of FP**, up from 57%), while ultrachat in the mix restored generation fluency. The model now *knows* (discriminates) AND *speaks* (generates coherently), though factual recall in free text remains capacity-bound. See [the model](https://huggingface.co/benzeng/tritfold-1.7b-feature-ptq1_0) and [findings-10](docs/findings-10-crossteacher.md).
 
 ### The knowledge ceiling — now a law, not a hypothesis (v0.3 + v0.4 corpus matrix)
 
@@ -95,6 +95,7 @@ Models (GGUF, Apache-2.0, Qwen3 derivatives):
 - **[benzeng/tritfold-1.7b-ptq1_0](https://huggingface.co/benzeng/tritfold-1.7b-ptq1_0)** — 1.41×FP, 424 MB (wiki-only)
 - **[benzeng/tritfold-1.7b-instruct-ptq1_0](https://huggingface.co/benzeng/tritfold-1.7b-instruct-ptq1_0)** — v0.2 instruct variant: follows EN instructions, wiki ppl improved to 1.26×FP mid-run
 - **[benzeng/tritfold-1.7b-knowledge-ptq1_0](https://huggingface.co/benzeng/tritfold-1.7b-knowledge-ptq1_0)** — v0.3 knowledge mix: wiki ppl record 1.24×FP, ARC breaks random (0.261); *fixes the format, not the facts*
+- **[benzeng/tritfold-1.7b-feature-ptq1_0](https://huggingface.co/benzeng/tritfold-1.7b-feature-ptq1_0)** — v0.6 feature-distilled: **sciq 72% FP + generation restored** + wiki ppl 1.03×FP; first ternary with both knowing AND saying
 - [benzeng/tritfold-0.6b-ptq1_0](https://huggingface.co/benzeng/tritfold-0.6b-ptq1_0) — 1.77×FP, 157 MB
 
 Requires the [PrismML llama.cpp fork](https://github.com/PrismML-Eng/llama.cpp) (`prism` branch) — mainline llama.cpp cannot load PTQ1_0 or apply the Hadamard metadata. **Sampling recipe is mandatory** (ternary distributions have flat tails; defaults loop):
