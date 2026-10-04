@@ -324,6 +324,7 @@ q_all = _all_sciq[: (_all_sciq.numel() // SEQ) * SEQ]; del _all_sciq; gc.collect
 print(f"wiki {wiki_all.numel()/1e6:.0f}M | sciq_tr {q_all.numel()/1e6:.2f}M ({q_all.numel()//SEQ} windows)", flush=True)
 
 # ultrachat 流（维持生成能力；N_ULTRA_CONV=0 跳过）
+rng = np.random.default_rng(0)
 if N_ULTRA_CONV > 0:
     uc = load_dataset("HuggingFaceH4/ultrachat_200k", split="train_sft").select(range(N_ULTRA_CONV))
     u_ids = []
@@ -341,8 +342,7 @@ else:
 print(f"ultra windows: {len(ultra_src)}", flush=True)
 
 # 窗口源（训练 cell 直接引用，不再重复创建）
-import numpy as np
-rng = np.random.default_rng(0)
+# rng 已在 ultrachat 块之前创建
 N_WIKI, N_SCIQ = STEPS * 6, STEPS * 2
 _w_off = rng.choice(wiki_all.numel() // SEQ, min(N_WIKI, wiki_all.numel()//SEQ), replace=False)
 wiki_src = [wiki_all[int(o)*SEQ: int(o)*SEQ+SEQ] for o in _w_off]
