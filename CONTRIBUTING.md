@@ -4,15 +4,13 @@
 
 | # | Direction | Entry point | Notes |
 |---|---|---|---|
-| 1 | **Feature-level distillation + phase-separated training** (M9′) | TBD (notebook in progress) | two-dimension insight applied: Phase 1 adds hidden-state cosine matching (does matching internal geometry transfer knowledge?); Phase 2 switches to supervised QA loss (does direct fact supervision inject knowledge?). Gates: sciq ≥0.50, at least one correct fact in generation |
-| 2 | **Corpus matrix** (M7, v0.4) — **concluded** | `notebooks/tritfold-v04-corpus.ipynb` | zh arm: Chinese sentence-level teachable (dose gap). know arm: knowledge saturation is corpus-insensitive. Findings only, no model publish |
-| 2 | **8B forward station** (M8) | adapt `generators/gen_train_1p7b.py` | needs 2×A100-80 ZeRO-3 (~$50/run); validates GDN fold path (attn_qkv/gate/ssm_out + V-reorder) and sharded latent-STE training before the 27B commit |
-| 3 | **27B main run** (M9) | TBD after M8 | 8×A100-80 (~$200/run, ~40 A100·h); same base as the official Bonsai 2 — direct comparability; extrapolated 1.1–1.3×FP |
-| 2 | **7–8B port** | adapt `generators/gen_train_1p7b.py` | needs 80GB GPU or ZeRO/sharding for the fp32 latent (~70GB+); scale effect so far: 1.77×→1.41×FP from 0.6B→1.7B |
-| 3 | **Benchmark harness** | extend the ARC mini-harness | MMLU / instruction-following evals on the PyTorch wrapper (not GGUF — avoids runtime-protocol confounds; see findings-6 for the three-protocol decomposition) |
-| 4 | **More architectures** | `proto/common/fwht_torch.py` is arch-agnostic; fold list must match the runtime whitelist (attn/ffn projections, ssm_out, lm_head, token_embd inverse) | qwen35/GDN hybrid-attention is the interesting case (V-reorder contract) |
-| 5 | **Activation-quant-aware training** | fake-quant int8 activations (MMQ path) in the STE stack | worth ~7% runtime-protocol ppl (measured, findings-6) |
-| 6 | **Kernel perf** | PTQ1_0 MMQ / FWHT in the fork | serving notebook has the build harness |
+| 1 | **M11: max out the 1.7B recipe** — sciq dose-response (1.2/2.4/4.8 epochs), 4500 steps, full-depth (28-layer) cosine hooks, plus measure the 8B teacher's own sciq (never measured — decides whether the gap is transfer- or corpus-limited) | adapt `generators/gen_m10_stack.py` (~15 units, one session) | gate: sciq ≥0.58 → close the 1.7B line at ~90% FP discrimination; else confirm capacity wall → M12. Full analysis: `docs/path-to-fp-parity.md` |
+| 2 | **M12: ternary 8B** — the iso-size end-run: 1.75GB ternary-8B is HALF the bytes of fp16-1.7B with 4× parameters; expected ~1.2×FP, i.e. beats FP 1.7B on everything at half the size | M4 pipeline at 8B scale (~150-200 units total chain) | the strategic answer to "reach the original 1.7B's capability" — see path-to-fp-parity §3 |
+| 3 | **Benchmark harness** — MMLU / instruction-following / long-context baselines on the PyTorch wrapper (both student AND teacher refs; the 8B ARC ref came free in M10's cache cell — same pattern) | extend the ARC mini-harness | "原 1.7B 能力" is currently measured on 2 probes + spot checks only |
+| 4 | **Activation-quant-aware training** | fake-quant int8 activations in the STE stack | worth ~7% runtime-protocol ppl (measured, findings-6) |
+| 5 | **Kernel perf** | PTQ1_0 MMQ / FWHT in the fork | serving notebook has the build harness |
+| 6 | **More architectures** | `proto/common/fwht_torch.py` is arch-agnostic | fold list must match the runtime whitelist |
+
 
 ## Ground rules
 
