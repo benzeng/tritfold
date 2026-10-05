@@ -49,7 +49,7 @@ cells.append(code("""# CUDA 构建（~25 min；目标：server/cli/perplexity + 
 import subprocess, os
 CUDA_ARCH = os.popen("nvidia-smi --query-gpu=compute_cap --format=csv,noheader").read().strip().replace(".", "")
 print("CUDA arch:", CUDA_ARCH)
-r = subprocess.run("cmake -B build-cuda -DCMAKE_BUILD_TYPE=Release -DGGML_CUDA=ON "
+r = subprocess.run("cmake -B build-cuda -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DGGML_CUDA=ON "
                    f"-DGGML_CUDA_ARCH={CUDA_ARCH} /content/llama.cpp > /tmp/cmake.log 2>&1", shell=True)
 if r.returncode: print(open("/tmp/cmake.log").read()[-2000:])
 r = subprocess.run("cmake --build build-cuda --target llama-server llama-cli llama-perplexity -j$(nproc) "
@@ -65,17 +65,20 @@ SCORER = r"""
 """
 open("/content/probe_scorer.cpp", "w").write(SCORER)
 import subprocess
-r = subprocess.run(
-    "g++ -O2 -o /content/probe_scorer /content/probe_scorer.cpp "
-    "-I/content/llama.cpp/include -I/content/llama.cpp/ggml/include "
-    "-L/content/build-cuda/src -L/content/build-cuda/ggml/src "
-    "-lllama -lggml -lggml-base -lggml-cuda "
-    "-Wl,-rpath,/content/build-cuda/src -Wl,-rpath,/content/build-cuda/ggml/src",
-    shell=True, capture_output=True, text=True)
+import os, glob
+so = glob.glob("/content/build-cuda/**/libllama.so*", recursive=True)
+assert so, "libllama.so 不存在——确认上一格 cmake 带 -DBUILD_SHARED_LIBS=ON 且构建成功"
+libdirs = sorted(set(os.path.dirname(x) for x in
+                     glob.glob("/content/build-cuda/**/lib*.so*", recursive=True)))
+L = " ".join("-L" + d for d in libdirs)
+R = " ".join("-Wl,-rpath," + d for d in libdirs)
+cmd = ("g++ -O2 -o /content/probe_scorer /content/probe_scorer.cpp "
+       "-I/content/llama.cpp/include -I/content/llama.cpp/ggml/include "
+       + L + " -lllama -lggml -lggml-base -lggml-cuda " + R)
+r = subprocess.run(cmd, shell=True, capture_output=True, text=True)
 print(r.stdout, r.stderr[-2000:] if r.stderr else "")
-import os
 assert os.path.exists("/content/probe_scorer"), "scorer build failed"
-print("probe_scorer ready")'''))
+print("probe_scorer ready | libdirs:", libdirs)'''))
 
 cells.append(code(r'''# 下载双模型（三值 7.2GB 私有仓 + Q8 29GB）
 import os
