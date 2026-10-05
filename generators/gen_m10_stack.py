@@ -386,6 +386,12 @@ os.environ["HF_HUB_OFFLINE"] = "1"; os.environ["HF_DATASETS_OFFLINE"] = "1"
 text2 = "\\n\\n".join(t for t in load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1")["test"]["text"] if t.strip())
 test_ids = toks(text2)
 arc = load_dataset("allenai/ai2_arc", "ARC-Challenge", split="test")
+_arc_tr_ng = set()
+for ex in list(arc_c) + list(arc_e):
+    _arc_tr_ng |= ngrams(ex["question"], 8)
+_n_ov = sum(1 for ex in arc if ngrams(ex["question"], 8) & _arc_tr_ng)
+print(f"ARC train→test 8-gram 近重叠报告: {_n_ov}/{len(arc)}（官方 split 外的近重复量，供判读）", flush=True)
+del _arc_tr_ng
 print(f"test {test_ids.numel()/1e3:.0f}K | windows ready: wiki {len(wiki_src)} | sciq {len(sciq_src)}", flush=True)"""))
 
 cells.append(md("""## 构建：v0.3 GGUF 自举 + 教师常驻（隐藏态 hook）"""))
@@ -589,9 +595,10 @@ for step in range(_start, STEPS + 1):
 
         # 双教师同 chunk 前向：hidden 用 1.7B（hook 已装），KL 用 8B
         with torch.no_grad():
-            _ = teacher(x)
+            _ = teacher.model(x)                  # 只跑主干填 hook（跳过 151936 维 lm_head）
             t_lg = teacher_kl(x).logits[:, :-1].float()
             tv_c, ti_c = torch.topk(t_lg, TOPK, dim=-1)
+            del t_lg                              # 622MB fp32 及时释放
 
         logits = student(x).logits[:, :-1].float()
         s_logp = F.log_softmax(logits, -1)
@@ -599,6 +606,7 @@ for step in range(_start, STEPS + 1):
             s_logp, -1, ti_c)).sum(-1).mean()
         loss_c = loss_c + LAMBDA_FEAT * feature_cos_loss() / (BATCH // CHUNK)
         (loss_c * n / BATCH).backward()
+        del logits, s_logp                       # 1.2GB fp32（graph 已由 backward 释放）
         loss_val += loss_c.item() * n / BATCH
 
     if math.isfinite(loss_val):
