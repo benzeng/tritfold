@@ -232,14 +232,14 @@ cells.append(md("""# Tritfold M10：三杠杆叠加 + ARC 对症预测
 **可证伪预测**：对症性是双向的——ARC 训练集入流应推动 ARC（0.268 → 0.30+），
 若成立则 M5″ 的“ARC 天花板”与 M7 饱和定律同样修订。
 
-**双教师设计**（每个杠杆跑在已验证配置上）：
-- `teacher_kl` = Qwen3-8B（top-50 KL；vocab 一致直连）
-- `teacher` = Qwen3-1.7B FP（18 层 hook 余弦；8B hidden 4096 维与学生 2048 不匹配，几何锚必须同维度）
+**双教师分阶段**（每个杠杆跑在已验证配置上；8B 常驻会 OOM，改为 v0.5 验证过的缓存设计）：
+- 缓存阶段：`teacher_kl` = Qwen3-8B 常驻 ~20 分钟——预计算四流全部窗口的 top-50（CPU pinned ~1.6GB）+ 顺带出 8B 自身 ARC 参考线，然后**彻底释放**
+- 训练阶段：`teacher` = Qwen3-1.7B FP 常驻（18 层 hook 余弦几何锚；8B hidden 4096 维与学生不匹配，几何锚必须同维度）+ KL 目标查表。峰值 ~22GB
 
 **数据**：wiki 3 + sciq 2 + **ARC-train 1**（ARC-C+E 共 3370 条，闭卷格式镜像评估键，concat+开窗绝不逐条过滤）+ ultra 2。
 
 **预期**：可加 → sciq 0.53~0.58（FP 78%+）；ARC ≥0.30。
-**运行**：A100 ~2.5h（双教师常驻 ~27GB）。"""))
+**运行**：A100 ~2h（缓存 ~25min + 训练 ~1.5h；训练峰值 ~22GB）。"""))
 
 cells.append(code("""%pip -q install --force-reinstall --no-deps "transformers==4.57.1" "tokenizers==0.22.2" "huggingface-hub==0.36.2"
 %pip -q install "datasets==5.0.1" "accelerate==1.14.0" sentencepiece protobuf bitsandbytes
@@ -268,7 +268,7 @@ cells.append(code("""MODEL = "Qwen/Qwen3-1.7B"
 TEACHER_KL = "Qwen/Qwen3-8B"   # ★ 跨尺寸 KL 教师（vocab 151936 一致，top-50 直接兼容）
 ARM = "M10"        # 单臂叠加实验（杠杆可加性 + ARC 对症预测）
 STEPS = 1500
-BATCH, SEQ, TOPK, CHUNK = 8, 512, 50, 2   # CHUNK=2：双教师常驻下控制瞬时峰值
+BATCH, SEQ, TOPK, CHUNK = 8, 512, 50, 4   # 8B 缓存后释放，训练峰值 ~22GB
 LRS = [2e-4, 1e-3, 3e-4]
 LAMBDA_FEAT = 0.1   # 余弦损失权重（与 m9p 1b 相同——已验证配置）
 HOOK_LAYERS = 18     # hook 前 18/28 层（几何教师 = 1.7B FP，同维度）
@@ -394,6 +394,59 @@ print(f"ARC train→test 8-gram 近重叠报告: {_n_ov}/{len(arc)}（官方 spl
 del _arc_tr_ng
 print(f"test {test_ids.numel()/1e3:.0f}K | windows ready: wiki {len(wiki_src)} | sciq {len(sciq_src)}", flush=True)"""))
 
+cells.append(md("""## ★ 8B KL 教师：缓存阶段（top-50 预计算 + ARC 参考线，随后彻底释放）"""))
+
+cells.append(code("""import gc, time
+
+teacher_kl = AutoModelForCausalLM.from_pretrained(TEACHER_KL, dtype=BF,
+                                                  attn_implementation="sdpa").to(DEV).eval()
+print(f"8B teacher loaded (cache phase): {torch.cuda.memory_allocated()/2**20:.0f}MB", flush=True)
+
+# ---- 趁 8B 常驻：先出教师自身的 ARC 参考线（学生若破 1.7B FP 基线，这是正确天花板口径） ----
+@torch.no_grad()
+def _t_score(prompt, option):
+    ids = tok(prompt + " {a}".format(a=option), return_tensors="pt").input_ids[0]
+    pl = tok(prompt, return_tensors="pt").input_ids[0].numel()
+    x = ids.unsqueeze(0).to(DEV)
+    lg = teacher_kl(x).logits.float()[0, pl-1:-1]
+    tgt = ids[pl:].to(DEV)
+    return (torch.log_softmax(lg, -1)[torch.arange(len(tgt), device=DEV), tgt].sum().item(), len(tgt))
+
+@torch.no_grad()
+def _teacher_arc_ref():
+    n = acc = accn = 0
+    for ex in arc:
+        prompt = "Question: {q}\\nAnswer:".format(q=ex["question"]) + "\\n"
+        sc = [_t_score(prompt, o) for o in ex["choices"]["text"]]
+        acc += max(range(len(sc)), key=lambda i: sc[i][0]) == ex["choices"]["label"].index(ex["answerKey"])
+        accn += max(range(len(sc)), key=lambda i: sc[i][0]/sc[i][1]) == ex["choices"]["label"].index(ex["answerKey"])
+        n += 1
+    print(f"[ARC-c 8B KL-teacher ref] acc {acc/n:.3f} | acc_norm {accn/n:.3f} (n={n})", flush=True)
+_teacher_arc_ref()
+
+# ---- 四流 top-50 缓存（CPU pinned，~1.6GB RAM） ----
+@torch.no_grad()
+def _cache_stream(src, name):
+    tvs = torch.empty(len(src), SEQ - 1, TOPK, dtype=torch.float16, pin_memory=True)
+    tis = torch.empty(len(src), SEQ - 1, TOPK, dtype=torch.int32, pin_memory=True)
+    for c0 in range(0, len(src), 8):
+        x = torch.stack(src[c0:c0+8]).to(DEV)
+        lg = teacher_kl(x).logits[:, :-1]
+        v, i = torch.topk(lg.float(), TOPK, dim=-1)
+        tvs[c0:c0+len(v)] = v.half().cpu(); tis[c0:c0+len(i)] = i.cpu()
+        if (c0 // 8) % 40 == 0: print(f"  cache {name}: {c0+len(v)}/{len(src)}", flush=True)
+    return tvs, tis
+
+_t0 = time.time()
+kl_wiki = _cache_stream(wiki_src, "wiki")
+kl_sciq = _cache_stream(sciq_src, "sciq")
+kl_arc = _cache_stream(arc_src, "arc")
+kl_ultra = _cache_stream(ultra_src, "ultra") if len(ultra_src) > 0 else None
+KL_SRC = {"w": kl_wiki, "s": kl_sciq, "a": kl_arc, "u": kl_ultra}
+print(f"KL cache done in {(time.time()-_t0)/60:.0f} min", flush=True)
+del teacher_kl; gc.collect(); torch.cuda.empty_cache()
+print(f"8B teacher freed: {torch.cuda.memory_allocated()/2**20:.0f}MB residual", flush=True)"""))
+
 cells.append(md("""## 构建：v0.3 GGUF 自举 + 教师常驻（隐藏态 hook）"""))
 
 cells.append(code("""import time, re
@@ -480,13 +533,10 @@ else:
 if "rr" in globals(): del rr
 gc.collect(); torch.cuda.empty_cache()
 
-# ===== 双教师常驻：几何教师（1.7B，hook 用）+ KL 教师（8B，top-50 用） =====
+# ===== 几何教师常驻（1.7B FP，hook 用；8B 已在缓存阶段释放） =====
 teacher = AutoModelForCausalLM.from_pretrained(MODEL, dtype=BF,
                                                attn_implementation="sdpa").to(DEV).eval()
-teacher_kl = AutoModelForCausalLM.from_pretrained(TEACHER_KL, dtype=BF,
-                                                  attn_implementation="sdpa").to(DEV).eval()
-print(f"dual teacher resident: {torch.cuda.memory_allocated()/2**20:.0f}MB "
-      f"(geo 1.7B + kl 8B)", flush=True)
+print(f"geo teacher resident: {torch.cuda.memory_allocated()/2**20:.0f}MB", flush=True)
 
 # ===== 隐藏态 hook（前 HOOK_LAYERS 层） =====
 _t_hidden, _s_hidden = {}, {}
@@ -579,26 +629,28 @@ if 'ck' in dir() and ck.get('arm') == ARM:
 t0 = time.time()
 for step in range(_start, STEPS + 1):
     j = step - 1
-    xs = [wiki_src[(j*3+k) % len(wiki_src)] for k in range(3)] + \\
-         [sciq_src[(j*2+k) % len(sciq_src)] for k in range(2)] + \\
-         [arc_src[j % len(arc_src)]]
+    ids = ([("w", (j*3+k) % len(wiki_src)) for k in range(3)] +
+          [("s", (j*2+k) % len(sciq_src)) for k in range(2)] +
+          [("a", j % len(arc_src))])
     if len(ultra_src) > 0:
-        xs += [ultra_src[(j*2+k) % len(ultra_src)] for k in range(2)]
+        ids += [("u", (j*2+k) % len(ultra_src)) for k in range(2)]
     else:
-        xs += [wiki_src[(j*5+3+k) % len(wiki_src)] for k in range(2)]
-
+        ids += [("w", (j*5+3+k) % len(wiki_src)) for k in range(2)]
+    SRC = {"w": wiki_src, "s": sciq_src, "a": arc_src, "u": ultra_src}
+    xs = [SRC[n][i_] for n, i_ in ids]
     opt.zero_grad(set_to_none=True)
     loss_val = 0.0
     for c in range(0, BATCH, CHUNK):
         n = min(CHUNK, BATCH - c)
         x = torch.stack([s for s in xs[c:c+n]]).to(DEV)
 
-        # 双教师同 chunk 前向：hidden 用 1.7B（hook 已装），KL 用 8B
+        # 几何教师前向填 hook；KL 目标从缓存查表（8B 已释放）
         with torch.no_grad():
             _ = teacher.model(x)                  # 只跑主干填 hook（跳过 151936 维 lm_head）
-            t_lg = teacher_kl(x).logits[:, :-1].float()
-            tv_c, ti_c = torch.topk(t_lg, TOPK, dim=-1)
-            del t_lg                              # 622MB fp32 及时释放
+            tv_c = torch.stack([KL_SRC[n][0][i_].to(DEV, non_blocking=True)
+                                for n, i_ in ids[c:c+n]]).float()
+            ti_c = torch.stack([KL_SRC[n][1][i_].to(DEV, non_blocking=True)
+                                for n, i_ in ids[c:c+n]]).long()
 
         logits = student(x).logits[:, :-1].float()
         s_logp = F.log_softmax(logits, -1)
@@ -668,14 +720,7 @@ probe(sciq_val, f"sciq clean (FP: 0.751/0.699)",
 probe(arc, f"ARC-c (FP: 0.357/0.378)",
       lambda ex: ex["choices"]["text"],
       lambda ex: ex["choices"]["label"].index(ex["answerKey"]))
-
-# ★ 8B KL 教师自身参考线（学生若破 1.7B FP 基线，教师口径才是正确的天花板）
-_swp = student
-student = teacher_kl
-probe(arc, "ARC-c (8B KL-teacher ref)",
-      lambda ex: ex["choices"]["text"],
-      lambda ex: ex["choices"]["label"].index(ex["answerKey"]))
-student = _swp"""))
+"""))
 
 cells.append(code(r'''QUESTIONS = ["What planet is known as the Red Planet?",
               "Why do we see lightning before we hear thunder?",
