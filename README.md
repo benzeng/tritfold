@@ -98,6 +98,7 @@ Models (GGUF, Apache-2.0, Qwen3 derivatives):
 - **[benzeng/tritfold-1.7b-instruct-ptq1_0](https://huggingface.co/benzeng/tritfold-1.7b-instruct-ptq1_0)** — v0.2 instruct variant: follows EN instructions, wiki ppl improved to 1.26×FP mid-run
 - **[benzeng/tritfold-1.7b-knowledge-ptq1_0](https://huggingface.co/benzeng/tritfold-1.7b-knowledge-ptq1_0)** — v0.3 knowledge mix: wiki ppl record 1.24×FP, ARC breaks random (0.261); *fixes the format, not the facts*
 - **[benzeng/tritfold-1.7b-feature-ptq1_0](https://huggingface.co/benzeng/tritfold-1.7b-feature-ptq1_0)** — v0.6 feature-distilled: **sciq 72% FP + generation restored** + wiki ppl 1.03×FP; first ternary with both knowing AND saying
+- **[benzeng/tritfold-1.7b-stacked-ptq1_0](https://huggingface.co/benzeng/tritfold-1.7b-stacked-ptq1_0)** — **v0.7 stacked (latest)**: three levers composed (8B KL teacher + targeted sciq stream + cosine) plus targeted ARC stream — **sciq 76% FP, ARC 84% FP, wiki ppl 1.014×FP simultaneously**; additivity was a blind prediction (0.526 predicted vs 0.530 measured)
 - [benzeng/tritfold-0.6b-ptq1_0](https://huggingface.co/benzeng/tritfold-0.6b-ptq1_0) — 1.77×FP, 157 MB
 
 Requires the [PrismML llama.cpp fork](https://github.com/PrismML-Eng/llama.cpp) (`prism` branch) — mainline llama.cpp cannot load PTQ1_0 or apply the Hadamard metadata. **Sampling recipe is mandatory** (ternary distributions have flat tails; defaults loop):
