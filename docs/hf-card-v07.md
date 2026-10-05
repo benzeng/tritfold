@@ -34,7 +34,7 @@ Each lever was isolated in its own controlled arm before this run:
 
 - A sciq stream moves sciq (+0.060) and not ARC (+0.007)
 - An ARC-Challenge+Easy train stream moves ARC: **0.261 → 0.319** (84% of FP; 8B-teacher reference 0.472)
-- Near-duplicate leakage between ARC train/test audited: 25/1172 (2.1%) — too small to explain the jump
+- Near-duplicate leakage between ARC train/test audited: 41/1172 (3.5%) — too small to explain the jump
 
 *Feed what you want it to know.* Both earlier "knowledge ceilings" (sciq saturates ~0.40; ARC stuck near chance) are revised: the ceiling is a soft boundary set by capacity AND corpus, pushed open by targeted distillation, raised further by teacher quality.
 
