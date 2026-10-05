@@ -250,6 +250,7 @@ from gguf.constants import GGMLQuantizationType as _Q
 print("gguf OK | PTQ1_0 =", int(_Q.PTQ1_0))"""))
 
 cells.append(code("""import os
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 import torch, gc
 assert torch.cuda.is_available() and torch.cuda.is_bf16_supported()
@@ -267,7 +268,7 @@ cells.append(code("""MODEL = "Qwen/Qwen3-1.7B"
 TEACHER_KL = "Qwen/Qwen3-8B"   # ★ 跨尺寸 KL 教师（vocab 151936 一致，top-50 直接兼容）
 ARM = "M10"        # 单臂叠加实验（杠杆可加性 + ARC 对症预测）
 STEPS = 1500
-BATCH, SEQ, TOPK, CHUNK = 8, 512, 50, 4
+BATCH, SEQ, TOPK, CHUNK = 8, 512, 50, 2   # CHUNK=2：双教师常驻下控制瞬时峰值
 LRS = [2e-4, 1e-3, 3e-4]
 LAMBDA_FEAT = 0.1   # 余弦损失权重（与 m9p 1b 相同——已验证配置）
 HOOK_LAYERS = 18     # hook 前 18/28 层（几何教师 = 1.7B FP，同维度）
@@ -606,6 +607,7 @@ for step in range(_start, STEPS + 1):
 
     # 清理 hook 缓存
     _t_hidden.clear(); _s_hidden.clear()
+    torch.cuda.empty_cache()
 
     if step % EVAL_EVERY == 0 or step == STEPS:
         ppl, skipped = ppl_of(student)
