@@ -6,12 +6,12 @@ The VRAM ledger at 8B (7.6B linear params) kills naive configs on A100-40GB:
   codes0 buffer (7.6GB) is unused during training           -> dropped
 Configurations under test (50 steps each, cached self-teacher KL targets):
   REF : 1.7B, Z fp32, Adam8bit  — the proven recipe, loss-curve reference
-  A   : 8B, Z bf16, Adam8bit    — fits (15.1+15.1+15.2+act ~ 47?) -> actually
-        over; with PagedAdam8bit -> ~31GB. RISK: bf16 ulp (~7.8e-3 at |Z|~1)
-        swallows lr-scale (2e-4) updates -> possible training stall.
-  B   : 8B, Z bf16 GPU compute + CPU fp32 master + CPU Adam (master-weights
-        pattern) + GPU Adam8bit for theta/islands -> ~31GB, ~5-7s/step PCIe
-        cost. Expected to WORK; the smoke measures speed and loss sanity.
+Round history: R1 A(no-ckpt) OOM 41.4GB hard floor (F.linear retains materialized
+w in graph — 3xZ); R2 B(ckpt+cpu-master) crashed Colab system RAM (fp32 master
+30.3 + CPU Adam m/v 60.6 = 91GB > 83GB). Round 3 tests:
+  A2 : 8B, Z bf16, PagedAdam8bit + GRADIENT CHECKPOINTING — hard floor 29.6GB,
+       paged states (15.2GB unified memory) migrate to host on pressure.
+       RISK remains: bf16 ulp swallowing lr-scale updates (loss stall check).
 Verdict: loss-drop shape of A/B vs REF + peak VRAM + s/step -> Stage 1 config.
 ~35-40 min, ~4-5 units.
 """
@@ -357,15 +357,18 @@ except torch.cuda.OutOfMemoryError as e:
     gc.collect(); torch.cuda.empty_cache()'''))
 
 cells.append(code(r'''# ===== 臂 2：A（8B，Z bf16 + PagedAdam8bit）—— 检验 ulp 吞更新 =====
-# A 臂已判死（PagedAdam8bit 分页态仍占 GPU 地址空间，Z+grad+states > 39.5GB），跳过
-print("臂 A：跳过（Stage0 第一轮实测 OOM）")'''))
+# A2：PagedAdam8bit + 梯度检查点。硬占用 29.6GB（Z+grad+瞬时），分页态 15.2GB 为统一内存可迁移——
+# 第一轮死于无检查点的 41.4GB 硬占用，这轮留了 10GB 余地让分页机制工作
+try:
+    RESULTS.append(run_arm("A2-8B-bf16Z-ckpt-paged", "Qwen/Qwen3-8B", torch.bfloat16, "gpu8bit_paged", grad_ckpt=True))
+except torch.cuda.OutOfMemoryError as e:
+    print("臂 A2 OOM：{}".format(e), flush=True)
+    gc.collect(); torch.cuda.empty_cache()'''))
 
 cells.append(code(r'''# ===== 臂 3：B（8B，Z bf16 计算 + CPU fp32 master）—— 正确性 + 速度代价 =====
-try:
-    RESULTS.append(run_arm("B-8B-bf16Z-ckpt-cpumaster", "Qwen/Qwen3-8B", torch.bfloat16, "cpu_master", grad_ckpt=True))
-except torch.cuda.OutOfMemoryError as e:
-    print("臂 B OOM：{}".format(e), flush=True)
-    gc.collect(); torch.cuda.empty_cache()'''))
+# B 臂判死：CPU fp32 master 30.3 + Adam m/v fp32 60.6 = 91GB > Colab 83GB 系统 RAM（第二轮实测会话崩溃）
+# 若 A2 仍失败，备选为自定义 CPU 8bit Adam（45.5GB RAM）或 4B/80GB 决策点
+print("臂 B：跳过（CPU RAM 91GB > 83GB，第二轮实测崩溃）")'''))
 
 cells.append(code(r'''# ===== 裁决表 =====
 import json
