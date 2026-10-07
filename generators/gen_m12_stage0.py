@@ -307,9 +307,11 @@ def run_arm(name, model_name, z_dtype, opt_mode):
             logits = model(x).logits[:, :-1].float()
             s_logp = F.log_softmax(logits, -1)
             loss_c = -(F.softmax(tv_c, -1) * torch.gather(s_logp, -1, ti_c)).sum(-1).mean()
-            loss_c.backward()
-            loss_val += loss_c.item()
+            (loss_c * CHUNK / BATCH).backward()
+            loss_val += loss_c.item() * CHUNK / BATCH
             del logits, s_logp, loss_c
+        torch.nn.utils.clip_grad_norm_(
+            [p for p in tr["Z"] + tr["theta"] + tr["island"] if p.grad is not None], 1.0)
         if cpu_opt:
             with torch.no_grad():
                 for z, zm in zip(tr["Z"], Z_masters):
