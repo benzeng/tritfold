@@ -39,7 +39,9 @@ cells.append(md("""# M12 Stage 0：8B 可行性烟测（VRAM 裁决）
 
 **判据**：A/B 的 loss 降幅形态 vs REF；峰值 VRAM；s/step。~35-40 min。"""))
 
-cells.append(code("""%pip -q install --force-reinstall --no-deps "transformers==4.57.1" "tokenizers==0.22.2" "huggingface-hub==0.36.2"
+cells.append(code("""import os
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+%pip -q install --force-reinstall --no-deps "transformers==4.57.1" "tokenizers==0.22.2" "huggingface-hub==0.36.2"
 %pip -q install "datasets==5.0.1" "accelerate==1.14.0" sentencepiece protobuf bitsandbytes
 import torch, transformers
 print(torch.__version__, transformers.__version__)"""))
@@ -242,7 +244,7 @@ def _wiki_windows(n, tok):
     ids = tok(text, return_tensors="pt").input_ids[0]
     return [ids[i*SEQ:(i+1)*SEQ] for i in range(n)]
 
-def run_arm(name, model_name, z_dtype, opt_mode):
+def run_arm(name, model_name, z_dtype, opt_mode, grad_ckpt=False):
     """opt_mode: 'gpu8bit' | 'gpu8bit_paged' | 'cpu_master'"""
     global Z_DTYPE
     Z_DTYPE = z_dtype
@@ -266,6 +268,10 @@ def run_arm(name, model_name, z_dtype, opt_mode):
     print(f"[{name}] cache done {(time.time()-t0)/60:.0f}min, VRAM {torch.cuda.memory_allocated()/2**30:.1f}GB")
     # ---- install ----
     emb, linears, tr = install(model)
+    if grad_ckpt:
+        model.config.use_cache = False
+        model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+        print(f"[{name}] gradient checkpointing ON（反传时重算 w_eff，不再图留 13.8GB）")
     gc.collect(); torch.cuda.empty_cache()
     print(f"[{name}] installed: {len(linears)} linears, VRAM {torch.cuda.memory_allocated()/2**30:.1f}GB")
     # ---- 优化器 ----
@@ -351,15 +357,12 @@ except torch.cuda.OutOfMemoryError as e:
     gc.collect(); torch.cuda.empty_cache()'''))
 
 cells.append(code(r'''# ===== 臂 2：A（8B，Z bf16 + PagedAdam8bit）—— 检验 ulp 吞更新 =====
-try:
-    RESULTS.append(run_arm("A-8B-bf16Z-paged", "Qwen/Qwen3-8B", torch.bfloat16, "gpu8bit_paged"))
-except torch.cuda.OutOfMemoryError as e:
-    print("臂 A OOM：{}".format(e), flush=True)
-    gc.collect(); torch.cuda.empty_cache()'''))
+# A 臂已判死（PagedAdam8bit 分页态仍占 GPU 地址空间，Z+grad+states > 39.5GB），跳过
+print("臂 A：跳过（Stage0 第一轮实测 OOM）")'''))
 
 cells.append(code(r'''# ===== 臂 3：B（8B，Z bf16 计算 + CPU fp32 master）—— 正确性 + 速度代价 =====
 try:
-    RESULTS.append(run_arm("B-8B-bf16Z-cpumaster", "Qwen/Qwen3-8B", torch.bfloat16, "cpu_master"))
+    RESULTS.append(run_arm("B-8B-bf16Z-ckpt-cpumaster", "Qwen/Qwen3-8B", torch.bfloat16, "cpu_master", grad_ckpt=True))
 except torch.cuda.OutOfMemoryError as e:
     print("臂 B OOM：{}".format(e), flush=True)
     gc.collect(); torch.cuda.empty_cache()'''))
