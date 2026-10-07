@@ -127,6 +127,12 @@ Checks C1–C5: Hadamard metadata, sign vectors bit-exact vs training seeds, 197
 3. **Pack losslessly**: end-state weights are exactly `±group-amax / 0`, so the runtime's naive amax+RTN repacking is bit-exact (1.75 bpw, base-3 trit packing);
 4. **Measure honestly**: fp16 forward inflates eval on drifted ternary models by up to 43% — evaluate in bf16, per-window, and require zero skipped windows for a "best".
 
+## The one-line recipe (the project's operational conclusion)
+
+> **To give the model a capability, train on corpus that is BOTH content- and format-aligned to it, through teacher distillation, at ~2 epochs per stream, spreading breadth within capacity.**
+
+**Corpus decides what to teach, the teacher decides how, the dose decides how many times, scale decides how much fits.** Each variable was calibrated separately: bidirectional corpus targeting (sciq/ARC streams), teacher quality (v0.5), dose interior optimum (~2.4 ep, M11), and scale (our 1.7B wall at 67% of teacher vs the official 27B artifact's ≥98% — measured by probing it directly, findings-14). What this buys: discrimination-class capabilities, probe by probe (the official model even beats its own FP base on instruction-following). What it doesn't: free-generation factual recall (knowing ≠ saying), beyond-capacity totals (zero-sum at fixed scale), and reasoning-class skills stay corpus-insensitive even at industrial scale (official math 96.57 < base 97.06). This is why the recipe matters for closed-model distillation: **the capability list IS the corpus list — and corpus you can manufacture.**
+
 ## The central question: does ternarization require retraining?
 
 Yes — and the project's full evidence chain gives the answer structure:
