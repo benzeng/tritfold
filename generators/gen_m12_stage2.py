@@ -263,13 +263,13 @@ if _os.path.exists(CKPT_DRIVE_BEST) and torch.load(CKPT_DRIVE_BEST, map_location
 boot_ppl, _ = ppl_of(model)
 print(f"bootstrap restore ppl = {boot_ppl:.2f}（应接近 Stage1 best）", flush=True)"""))
 
-cells.append(code("""# ===== 训练循环（2000 步，矩阵配比；容错快照；剂量探针）=====
-import time, math, shutil, os
+cells.append(code("""# ===== 训练循环（v2：每 500 步无条件 Drive 快照——断连零损失 + 剂量点留档）=====
+import time, math, os
 import torch.nn.functional as F
 import shutil as _shutil, time as _time
 
 def snapshot(path, step_i, ppl_i):
-    # 容错快照：本地中转 -> 拷贝（重试x2）-> 任何失败只告警不杀训练
+    # 容错快照：本地中转 -> 拷贝（重试x2）-> 失败只告警不杀训练
     def _state():
         return {"step": step_i, "ppl": ppl_i, "arm": "m12s2", "hist": hist,
                 "Z": [m.Z.detach().cpu() for m in linears],
@@ -288,18 +288,24 @@ def snapshot(path, step_i, ppl_i):
                     print(f"!! Drive 拷贝重试 {attempt+1}: {type(e).__name__}", flush=True)
                     _time.sleep(20)
             else:
-                print(f"!! snapshot {path} 两次拷贝均失败——训练继续", flush=True)
+                print(f"!! snapshot 两次拷贝均失败——训练继续", flush=True)
                 return
             os.remove(tmp)
         else:
             torch.save(_state(), path)
     except Exception as e:
-        print(f"!! snapshot {path} 失败（{type(e).__name__}）——训练继续", flush=True)
+        print(f"!! snapshot 失败（{type(e).__name__}）——训练继续", flush=True)
 
-def kl_of(k):
-    if k < S: return tvm[k], tim[k]
-    if k < S + A: return tvm[k], tim[k]
-    return tvm[k], tim[k]
+_start = 1
+if os.path.exists(CKPT_DRIVE_BEST):
+    _ck = torch.load(CKPT_DRIVE_BEST, map_location="cpu")
+    if _ck.get("arm", "") == "m12s2" and _ck.get("step", 0) < STEPS:
+        _start = _ck["step"] + 1
+        hist = _ck.get("hist", [])
+        print(f"RESUME m12s2 from step {_ck['step']}", flush=True)
+    elif _ck.get("arm", "") == "m12s2":
+        _start = STEPS + 1
+        print(f"m12s2 快照已完备（step {_ck['step']}）——训练跳过", flush=True)
 
 model.train()
 best = boot_ppl
@@ -333,14 +339,11 @@ for step in range(_start, STEPS + 1):
     if step % 20 == 0:
         print(f">> [m12s2] step {step} loss {loss_val:.3f} ({step*BATCH*SEQ/(time.time()-t0):.0f} tok/s)", flush=True)
     if step % 500 == 0:
-        snapshot(CKPT_LOCAL, step, None)
+        snapshot(CKPT_DRIVE_BEST, step, None)   # 无条件：断连零损失 + 剂量点留档
     if step % EVAL_EVERY == 0 or step == STEPS:
         ppl, skipped = ppl_of(model)
         hist.append((step, ppl))
-        print(f">> [m12s2] step {step} ppl={ppl:.2f} (best {best:.2f}) skip={skipped}", flush=True)
-        if math.isfinite(ppl) and skipped == 0 and ppl < best - 0.01:
-            best = ppl
-            snapshot(CKPT_DRIVE_BEST, step, ppl)
+        print(f">> [m12s2] step {step} ppl={ppl:.2f} skip={skipped}", flush=True)
     if step in PROBE_AT:
         probe(sciq_val, f"DOSE sciq @{step} (FP 0.830)",
               lambda ex: [ex["correct_answer"]] + [ex["distractor" + str(i)] for i in (1, 2, 3)],
@@ -348,7 +351,7 @@ for step in range(_start, STEPS + 1):
         probe(arc, f"DOSE ARC @{step} (FP 0.472)",
               lambda ex: ex["choices"]["text"],
               lambda ex: ex["choices"]["label"].index(ex["answerKey"]))
-print(f"DONE Stage 2: best ppl {best:.2f} (boot {boot_ppl:.2f})")"""))
+print("DONE Stage 2（500/1000/1500/2000 各有剂量点快照在 Drive）")"""))
 
 cells.append(code("""# ===== 终局判卷 =====
 probe(sciq_val, "FINAL sciq (FP 0.751/0.830)",
