@@ -160,13 +160,34 @@ cells.append(code("""# ===== 训练循环（5000 步；快照轮换；断连韧�
 import time, shutil, math
 import torch.nn.functional as F
 
+import shutil as _shutil, time as _time
 def snapshot(path, step_i, ppl_i):
-    torch.save({"step": step_i, "ppl": ppl_i, "hist": hist,
+    # 容错快照：本地中转 → 拷贝（重试×2）→ 任何失败只告警不杀训练
+    def _state():
+        return {"step": step_i, "ppl": ppl_i, "hist": hist,
                 "Z": [m.Z.detach().cpu() for m in linears],
                 "theta": [m.theta.detach().cpu() for m in linears],
                 "emb_theta": emb.theta.detach().cpu(), "emb_codes": emb.codes.cpu(),
                 "islands": {n: m.weight.detach().cpu() for n, m in model.named_modules()
-                            if isinstance(m, Fp32RMSNorm)}}, path)
+                            if isinstance(m, Fp32RMSNorm)}}
+    try:
+        if path.startswith("/content/drive"):
+            tmp = "/content/m12s1_snap_tmp.pt"
+            torch.save(_state(), tmp)
+            for attempt in range(2):
+                try:
+                    _shutil.copy(tmp, path); break
+                except Exception as e:
+                    print(f"!! Drive 拷贝重试 {attempt+1}: {type(e).__name__}", flush=True)
+                    _time.sleep(20)
+            else:
+                print(f"!! snapshot {path} 两次拷贝均失败——保留本地 tmp，训练继续", flush=True)
+                return
+            os.remove(tmp)
+        else:
+            torch.save(_state(), path)
+    except Exception as e:
+        print(f"!! snapshot {path} 失败（{type(e).__name__}）——训练继续", flush=True)
 
 model.train()
 _, cur_ppl = (None, ppl_of(model)[0]) if _start == 1 else (None, float("nan"))
@@ -205,8 +226,6 @@ for step in range(_start, STEPS + 1):
         if math.isfinite(ppl) and skipped == 0 and ppl < best - 0.01:
             best = ppl
             snapshot(CKPT_DRIVE_BEST, step, ppl)
-        if step % 1000 == 0:
-            snapshot(CKPT_DRIVE_ROT, step, ppl)
 print(f"DONE: best ppl {best:.2f} = {best/fp_ppl:.3f}x FP-8B (门 1.2x)")
 print("history:", hist)"""))
 
