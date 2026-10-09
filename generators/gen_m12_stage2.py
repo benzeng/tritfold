@@ -337,9 +337,9 @@ for step in range(_start, STEPS + 1):
         [p for p in tr["Z"] + tr["theta"] + tr["island"] if p.grad is not None], 1.0)
     opt.step()
     if step % 20 == 0:
-        print(f">> [m12s2] step {step} loss {loss_val:.3f} ({step*BATCH*SEQ/(time.time()-t0):.0f} tok/s)", flush=True)
-    if step % 500 == 0:
-        snapshot(CKPT_DRIVE_BEST, step, None)   # 无条件：断连零损失 + 剂量点留档
+        print(f">> [m12s2] step {step} loss {loss_val:.3f} ({(step-_start+1)*BATCH*SEQ/(time.time()-t0):.0f} tok/s)", flush=True)
+    if step == STEPS:
+        snapshot(CKPT_DRIVE_BEST, step, None)   # 仅终点（RAM 教训：反复物化 14.75GB 会碎片化顶穿 83GB）
     if step % EVAL_EVERY == 0 or step == STEPS:
         ppl, skipped = ppl_of(model)
         hist.append((step, ppl))
