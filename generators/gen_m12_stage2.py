@@ -243,6 +243,7 @@ if _os.path.exists(CKPT_DRIVE_BEST):
     ck_a = torch.load(CKPT_DRIVE_BEST, map_location="cpu")
     ck_b = torch.load(BOOT, map_location="cpu")
     _boot_from = CKPT_DRIVE_BEST if ck_a.get("step", 0) >= getattr(ck_b, "step", ck_b.get("step", 0)) else BOOT
+    del ck_a, ck_b; gc.collect()   # 僵尸引用即删（44GB RAM 教训）
 _start, hist = 1, []
 if _os.path.exists(_boot_from):
     ck = torch.load(_boot_from, map_location="cpu")
@@ -255,6 +256,7 @@ if _os.path.exists(_boot_from):
                 m_i.weight.copy_(ck["islands"][n_])
     _step0 = ck.get("step", 0)
     print(f"bootstrapped from {_boot_from} (source step {_step0}, fresh optimizer)", flush=True)
+    del ck; gc.collect()           # 同上
 if _os.path.exists(CKPT_DRIVE_BEST) and torch.load(CKPT_DRIVE_BEST, map_location="cpu").get("arm", "") == "m12s2" \\
    and torch.load(CKPT_DRIVE_BEST, map_location="cpu").get("step", 0) < STEPS:
     ck = torch.load(CKPT_DRIVE_BEST, map_location="cpu")
@@ -352,6 +354,35 @@ for step in range(_start, STEPS + 1):
               lambda ex: ex["choices"]["text"],
               lambda ex: ex["choices"]["label"].index(ex["answerKey"]))
 print("DONE Stage 2（500/1000/1500/2000 各有剂量点快照在 Drive）")"""))
+
+cells.append(code("""# ===== 救援/落盘 cell（训练结束后执行：清僵尸 + 终态落盘 + 补判卷）=====
+import gc, os, shutil, math, time
+import torch
+for _z in ("ck_a", "ck_b", "ck"):
+    if _z in dir():
+        del globals()[_z]
+gc.collect()
+try:
+    import ctypes; ctypes.CDLL("libc.so.6").malloc_trim(0)
+except Exception:
+    pass
+def _state():
+    return {"step": STEPS, "ppl": None, "arm": "m12s2", "hist": hist,
+            "Z": [m.Z.detach().cpu() for m in linears],
+            "theta": [m.theta.detach().cpu() for m in linears],
+            "emb_theta": emb.theta.detach().cpu(), "emb_codes": emb.codes.cpu(),
+            "islands": {n: m.weight.detach().cpu() for n, m in model.named_modules()
+                        if isinstance(m, Fp32RMSNorm)}}
+try:
+    torch.save(_state(), "/content/m12s2_final.pt")
+    for _att in range(3):
+        try:
+            shutil.copy("/content/m12s2_final.pt", CKPT_DRIVE_BEST)
+            print("终态已落 Drive OK", flush=True); break
+        except Exception as e:
+            print(f"拷贝重试 {_att+1}: {type(e).__name__}", flush=True); time.sleep(15)
+except Exception as e:
+    print(f"终态落盘失败: {type(e).__name__}", flush=True)"""))
 
 cells.append(code("""# ===== 终局判卷 =====
 probe(sciq_val, "FINAL sciq (FP 0.751/0.830)",
