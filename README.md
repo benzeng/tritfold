@@ -2,6 +2,17 @@
 
 **Open, end-to-end training of ~1.75 bpw ternary LLMs with Hadamard-folded weights — an independent reproduction built entirely from public math.**
 
+> ## Project status: concluded (Oct 2026) — paused on resource grounds
+>
+> **The final conclusions, end to end:**
+>
+> 1. **Ternarization requires retraining, and the recipe is now public**: fold + max-entropy init + latent-STE QAT with teacher KL. **The one-line recipe for capabilities**: *corpus decides what to teach, the teacher decides how, the dose decides how many times (~2 epochs/stream), scale decides how much fits* — each variable calibrated separately (findings-9/11/13/14).
+> 2. **Flagship**: [tritfold-1.7b-stacked-ptq1_0](https://huggingface.co/benzeng/tritfold-1.7b-stacked-ptq1_0) — sciq **76%** / ARC **84%** of FP at wiki ppl **1.014×**, 424 MB (9.1× smaller). Three stacked levers whose additivity was a blind prediction (0.526 predicted vs 0.530 measured).
+> 3. **The official ternary 27B is *not* weaker than its FP base** (knowledge probes 120%, benchmark suite 98.2% — measured directly, findings-14); its mechanism is self-distillation + massive task-targeted corpus *recalibration*, not a bigger teacher (findings-15/16).
+> 4. **At small budgets, chain-polishing beats parameter scaling** (M12, findings-18): our one-shot 8B bake (2.38× ppl) lost on both axes to the five-round 1.7B chain; knowledge injection requires a well-baked substrate, and the base-bake entry fee for scale is compute-class 40-160× ours. The 8B engineering recipe is archived and rerunnable when resources allow (roadmap §7: three costed plans).
+>
+> Full evidence chain: 18 findings docs, two self-errata, every experiment logged in `docs/results-log.md`. Future restarts: v0.7.1 recovery (~10 units) or the 8B re-bake plans — see `docs/path-to-fp-parity.md`.
+
 Tritfold takes a standard fp16 LLM (Qwen3), folds its weights into a fixed block-Hadamard basis, distills them into symmetric ternary codes (`{-s, 0, +s}`, one fp16 scale per 128 weights), and emits artifacts that load directly in a production-grade runtime — verified bit-exact against the packing format.
 
 > **Positioning & disclaimer.** Tritfold is an independent research reproduction. It is **not affiliated with, endorsed by, or derived from any proprietary code** of PrismML or Caltech. The method was reconstructed from published papers (QuaRot, SpinQuant, QuIP#, PV-Tuning, BitDistiller, TernaryLLM, LLM-QAT, OneBit — see [Acknowledgments](#acknowledgments)) plus public analysis of released model artifacts. The proprietary training process behind commercial ternary models remains theirs; the gap between our results and theirs is consistent with their reported compute scale. "Bonsai" names appear in docs only as factual references to public products.
